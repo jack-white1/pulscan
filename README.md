@@ -21,7 +21,7 @@ A PRESTO-compatible implementation of the (fast + approximate) boxcar accelerati
 3. Post process the candidate file to make a human readable version with `python3 make_formatted_candidate_list.py PATH_TO_CANDIDATE_FILE.bctxtcand`
 
 ## EXAMPLE
-1. Dedisperse your filterbank with PRESTO's `prepsubband` and make your .fft file using PRESTO's `realfft` command
+1. Use the included test data, or dedisperse your filterbank with PRESTO's `prepsubband` and make your .fft file using PRESTO's `realfft` command to make a .fft file
 2. `gcc pulscan.c -o pulscan -lm -fopenmp -Ofast -ftree-vectorize -ffast-math -fopt-info-vec-optimized`
 3. `./pulscan ./test_data/test.fft`
 4. `python3 make_formatted_candidate_list.py ./test_data/test.bctxtcand`
