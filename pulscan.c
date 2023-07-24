@@ -1,6 +1,6 @@
 // Jack White 2023, jack.white@eng.ox.ac.uk
 
-// compile with "gcc pulscan.c -o pulscan -lm -fopenmp -Ofast -ftree-vectorize"
+// compile with "gcc pulscan.c -o pulscan -lm -fopenmp -Ofast -ftree-vectorize -ffast-math -fopt-info-vec-optimized"
 
 // run with "./pulscan"
 

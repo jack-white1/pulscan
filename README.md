@@ -5,7 +5,7 @@ A PRESTO-compatible implementation of the (fast + approximate) boxcar accelerati
 **EXPECT LOWER SENSITIVITY THAN PRESTO'S ACCEL_SEARCH**
 
 ## INSTRUCTIONS
-1. Compile with `gcc pulscan.c -o pulscan -lm -fopenmp -Ofast -ftree-vectorize`
+1. Compile with `gcc pulscan.c -o pulscan -lm -fopenmp -Ofast -ftree-vectorize -ffast-math -fopt-info-vec-optimized`
 
 2. Run with `./pulscan FILENAME -ncpus XXX -zmax XXX - candidates XXX`
     - REQUIRED argument `filename`
@@ -18,7 +18,7 @@ A PRESTO-compatible implementation of the (fast + approximate) boxcar accelerati
 
 ## EXAMPLE
 0. Dedisperse your filterbank with PRESTO's `prepsubband` and make your .fft file using PRESTO's `realfft` command
-1. `gcc pulscan.c -o pulscan -lm -fopenmp -Ofast -ftree-vectorize`
+1. `gcc pulscan.c -o pulscan -lm -fopenmp -Ofast -ftree-vectorize -ffast-math -fopt-info-vec-optimized`
 2. `./pulscan ./test_data/test.fft`
 3. `python3 make_formatted_candidate_list.py ./test_data/test.bctxtcand`
 
