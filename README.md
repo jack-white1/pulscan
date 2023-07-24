@@ -1,6 +1,6 @@
 # PULSCAN
 
-A PRESTO-compatible implementation of the boxcar acceleration search (in development) for detecting the signatures of binary pulsars in PRESTO .fft files.
+A PRESTO-compatible implementation of the (fast + approximate) boxcar acceleration search (in development) for detecting the signatures of binary pulsars in PRESTO .fft files.
 
 **EXPECT LOWER SENSITIVITY THAN PRESTO'S ACCEL_SEARCH**
 
