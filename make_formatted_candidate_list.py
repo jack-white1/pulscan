@@ -11,7 +11,7 @@ def extended_equiv_gaussian_sigma(logp):
     denom = 1.0 + t * (1.432788 + t * (0.189269 + t * 0.001308))
     return t - num / denom
 
-def log_asymtotic_incomplete_gamma(a, z):
+def log_asymptotic_incomplete_gamma(a, z):
     x = 1.0
     newxpart = 1.0
     term = 1.0
@@ -23,7 +23,7 @@ def log_asymtotic_incomplete_gamma(a, z):
         ii += 1
     return (a - 1.0) * np.log(z) - z + np.log(x)
 
-def log_asymtotic_gamma(z):
+def log_asymptotic_gamma(z):
     x = (z - 0.5) * np.log(z) - z + 0.91893853320467267
     y = 1.0 / (z * z)
     x += (((-5.9523809523809529e-4 * y
@@ -47,7 +47,7 @@ def chi2_logp(chi2, dof):
     logp = -np.inf
     if chi2 > 0.0:
         if chi2 / dof > 15.0 or (dof > 150 and chi2 / dof > 6.0):
-            logp = log_asymtotic_incomplete_gamma(0.5 * dof, 0.5 * chi2) - log_asymtotic_gamma(0.5 * dof)
+            logp = log_asymptotic_incomplete_gamma(0.5 * dof, 0.5 * chi2) - log_asymptotic_gamma(0.5 * dof)
         else:
             p = chi2_distribution.cdf(chi2, dof)  # Corrected here
             logp = np.log(1.0 - p)
