@@ -2,7 +2,7 @@
 
 A PRESTO-compatible implementation of the boxcar acceleration search (in development) for detecting the signatures of binary pulsars in PRESTO .fft files.
 
-**EXPECT LOWER SENSITIVITY THAN PRESTO'S FDAS ACCEL_SEARCH**
+**EXPECT LOWER SENSITIVITY THAN PRESTO'S ACCEL_SEARCH**
 
 ## INSTRUCTIONS
 1. Compile with `gcc pulscan.c -o pulscan -lm -fopenmp -Ofast -ftree-vectorize`
@@ -21,3 +21,9 @@ A PRESTO-compatible implementation of the boxcar acceleration search (in develop
 1. `gcc pulscan.c -o pulscan -lm -fopenmp -Ofast -ftree-vectorize`
 2. `./pulscan ./test_data/test.fft`
 3. `python3 make_formatted_candidate_list.py ./test_data/test.bctxtcand`
+
+## NOTES
+- The code is currently in development and is not yet fully functional
+- The code is not fully tested
+- There is no harmonic summing
+- _Output sigmas may be incorrect_
