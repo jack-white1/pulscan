@@ -25,5 +25,8 @@ A PRESTO-compatible implementation of the boxcar acceleration search (in develop
 ## NOTES
 - The code is currently in development and is not yet fully functional
 - The code is not fully tested
-- There is no harmonic summing
 - _Output sigmas may be incorrect_
+
+## FUTURE WORK
+- Integrate harmonic summing
+- GPU version
