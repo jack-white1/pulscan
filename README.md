@@ -19,5 +19,5 @@ A PRESTO-compatible implementation of the boxcar acceleration search (in develop
 ## EXAMPLE
 
 1. `gcc pulscan.c -o pulscan -lm -fopenmp -Ofast -ftree-vectorize`
-2. `./pulscan /data/test.fft`
-3. `python3 make_formatted_candidate_list /data/test.bctxtcand`
+2. `./pulscan ./test_data/test.fft`
+3. `python3 make_formatted_candidate_list ./test_data/test.bctxtcand`
