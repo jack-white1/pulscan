@@ -4,7 +4,7 @@ A PRESTO-compatible implementation of the boxcar acceleration search (in develop
 
 **EXPECT LOWER SENSITIVITY THAN PRESTO'S ACCEL_SEARCH**
 
-##INSTRUCTIONS
+## INSTRUCTIONS
 1. Compile with `gcc pulscan.c -o pulscan -lm -fopenmp -Ofast -ftree-vectorize`
 
 2. Run with `./pulscan FILENAME -ncpus XXX -zmax XXX - candidates XXX`
@@ -16,7 +16,7 @@ A PRESTO-compatible implementation of the boxcar acceleration search (in develop
 
 3. Post process the candidate file to make a human readable version with `python3 make_formatted_candidate_list PATH_TO_CANDIDATE_FILE.bctxtcand`
 
-##EXAMPLE
+## EXAMPLE
 
 1. `gcc pulscan.c -o pulscan -lm -fopenmp -Ofast -ftree-vectorize`
 2. `./pulscan /data/test.fft`
