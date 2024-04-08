@@ -1,6 +1,18 @@
+```
+    .          .     .     *        .   .   .     .
+         ___________      . __ .  .   *  .   .  .  .     .
+    . *   _____  __ \__+ __/ /_____________ _____ .    *  .
+  +    .   ___  /_/ / / / / / ___/ ___/ __ `/ __ \     + .
+ .          _  ____/ /_/ / (__  ) /__/ /_/ / / / / .  *     . 
+       .    /_/ *  \__,_/_/____/\___/\__,_/_/ /_/    
+    *    +     .     .     . +     .     +   .      *   +
+
+    J. White, K. Adámek, J. Roy, S. Ransom, W. Armour  2023
+```
+
 # Pulscan
 
-Pulscan is a high-performance pulsar searching tool that can run on CPUs as well as GPUs for accelerated computation. This tool performs an acceleration search for the signature of binary pulsars using boxcar filters on FFT spectra. 
+Pulscan is a high-performance pulsar searching tool that can run on GPUs, CPUs and hybrid systems such as NVIDIA Grace Hopper. Pulscan performs an acceleration search for the signature of binary pulsars using boxcar filters on FFT spectra. 
 
 The input data is expected to be in .fft format, which can be produced using PRESTO's `realfft` program.
 
@@ -66,12 +78,18 @@ To compile the CPU version of Pulscan, follow these steps:
 
 ### Running the GPU version
 
-`./pulscan_gpu sample_data/test_data.fft`
+```bash
+./pulscan_gpu sample_data/test_data.fft
+```
 
 ### Running the hybrid CPU/GPU version
 
-`./pulscan_hybrid sample_data/test_data.fft`
+```bash
+./pulscan_hybrid sample_data/test_data.fft
+```
 
 ### Running the CPU version
 
-`./pulscan sample_data/test_data.fft -tobs 602.112`
+```bash
+./pulscan sample_data/test_data.fft -tobs 602.112
+```
