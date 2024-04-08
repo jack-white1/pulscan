@@ -1,12 +1,17 @@
 # Pulscan
 
-Pulscan is a high-performance pulsar searching tool that can run on CPUs as well as GPUs for accelerated computation. This tool is designed to analyze astronomical data for pulsar search, employing various computational optimizations for efficiency.
+Pulscan is a high-performance pulsar searching tool that can run on CPUs as well as GPUs for accelerated computation. This tool performs an acceleration search for the signature of binary pulsars using boxcar filters on FFT spectra. 
+
+The input data is expected to be in .fft format.
+
+A .fft file is a binary file consisting of an even number of FP32 floats, where each pair represents the real and complex component of a single bin of an FFT spectrum. The first pair of floats represents the DC, or zero frequency component of the signal. The final pair of numbers should be the frequency component corresponding to sampling_frequency/2.
 
 ## Prerequisites
 
 - GCC compiler for C code compilation
-- NVIDIA CUDA Toolkit for compiling and running GPU and hybrid codes
 - OpenMP for parallel computing on the CPU
+- NVIDIA CUDA Toolkit for compiling and running GPU and hybrid codes
+
 
 ## Installation
 

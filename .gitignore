@@ -4,3 +4,4 @@ pulscan_gpu
 *.pulscand
 *.o
 .vscode
+*.pulscand

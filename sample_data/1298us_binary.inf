@@ -1,0 +1,27 @@
+ Data file name without suffix          =  /data/oerc-astro-accelerate/sedm5426/boxcar_fdas/10K_test/c0f8b185-6c86-4591-8860-0c86ce718dc9/dedispersed_c0f8b185-6c86-4591-8860-0c86ce718dc9_DM113.62
+ Telescope used                         =  Parkes
+ Instrument used                        =  Unknown
+ Object being observed                  =  P: 1.297533521526 ms, DM: 113.618
+ J2000 Right Ascension (hh:mm:ss.ssss)  =  00:00:00.0000
+ J2000 Declination     (dd:mm:ss.ssss)  =  00:00:00.0000
+ Data observed by                       =  unset
+ Epoch of observation (MJD)             =  50000.000000000000000
+ Barycentered?           (1 yes, 0 no)  =  0
+ Number of bins in the time series      =  4704000    
+ Width of each time series bin (sec)    =  0.000128
+ Any breaks in the data? (1 yes, 0 no)  =  1
+ On/Off bin pair #  1                   =  0          , 4682399    
+ On/Off bin pair #  2                   =  4703999    , 4703999    
+ Type of observation (EM band)          =  Radio
+ Beam diameter (arcsec)                 =  828
+ Dispersion measure (cm-3 pc)           =  113.617655077
+ Central freq of low channel (MHz)      =  1250.2929667
+ Total bandwidth (MHz)                  =  300.000002048
+ Number of channels                     =  1024
+ Channel bandwidth (MHz)                =  0.292968752
+ Data analyzed by                       =  sedm5426
+ Any additional notes:
+    Project ID unset, Date: 1995-10-10T00:00:00.
+    2 polns were summed.  Samples have 8 bits.
+
+
