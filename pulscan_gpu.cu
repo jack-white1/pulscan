@@ -502,18 +502,18 @@ void copyDeviceArrayToHostAndSaveToFile(float* deviceArray, long numFloats, cons
 
 const char* pulscan_frame = 
 "    .          .     .     *        .   .   .     .\n"
-"         "BOLD"___________      . __"RESET" .  .   *  .   .  .  .     .\n"
-"    . *   "BOLD"_____  __ \\__+ __/ /_____________ _____"RESET" .    "FLASHING"*"RESET"  .\n"
-"  +    .   "BOLD"___  /_/ / / / / / ___/ ___/ __ `/ __ \\"RESET"     + .\n"
-" .          "BOLD"_  ____/ /_/ / (__  ) /__/ /_/ / / / /"RESET" .  *     . \n"
-"       .    "BOLD"/_/ *  \\__,_/_/____/\\___/\\__,_/_/ /_/"RESET"    \n"
+"         " BOLD "___________      . __" RESET " .  .   *  .   .  .  .     .\n"
+"    . *   " BOLD "_____  __ \\__+ __/ /_____________ _____" RESET " .    " FLASHING "*" RESET "  .\n"
+"  +    .   " BOLD "___  /_/ / / / / / ___/ ___/ __ `/ __ \\" RESET "     + .\n"
+" .          " BOLD "_  ____/ /_/ / (__  ) /__/ /_/ / / / /" RESET " .  *     . \n"
+"       .    " BOLD "/_/ *  \\__,_/_/____/\\___/\\__,_/_/ /_/" RESET "    \n"
 "    *    +     .     .     . +     .     +   .      *   +\n"
 
 "  J. White, K. Adámek, J. Roy, S. Ransom, W. Armour  2023\n\n";
 
 int main(int argc, char* argv[]){
     int debug = 0;
-    printf("%s", frame);
+    printf("%s\n", pulscan_frame);
 
     // start high resolution timer to measure gpu initialisation time using chrono
     auto start_chrono = std::chrono::high_resolution_clock::now();

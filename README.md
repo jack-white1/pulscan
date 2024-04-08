@@ -56,6 +56,3 @@ To compile the GPU-only version of Pulscan:
 ```bash
 nvcc pulscan_gpu.cu -o pulscan_gpu -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math
 ```
-```
-
-Feel free to adjust the content to better suit your project's needs or preferences.
