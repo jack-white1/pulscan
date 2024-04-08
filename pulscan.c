@@ -1209,7 +1209,7 @@ int main(int argc, char *argv[]) {
     // write final_output_candidates to text file with physical measurements
     for (int i = 0; i < num_candidates; i++){
         if (global_candidates_array[i].sigma > sigma_threshold){
-            if (global_candidates_array[i].index > 0){
+            //if (global_candidates_array[i].index > 0){
                 temp_period_ms = period_ms_from_frequency(frequency_from_observation_time_seconds(observation_time_seconds,global_candidates_array[i].index));
                 temp_frequency = frequency_from_observation_time_seconds(observation_time_seconds,global_candidates_array[i].index);
                 temp_fdot = fdot_from_boxcar_width(global_candidates_array[i].z, observation_time_seconds);
@@ -1239,7 +1239,7 @@ int main(int argc, char *argv[]) {
                     temp_acceleration,
                     temp_logp,
                     global_candidates_array[i].harmonic);
-            }
+            //}
         }
     }
 

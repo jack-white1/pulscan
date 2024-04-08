@@ -17,21 +17,13 @@ git clone https://github.com/jack-white1/pulscan
 cd pulscan
 ```
 
-### For CPU Version
+### For GPU Version
 
-To compile the CPU version of Pulscan, follow these steps:
+To compile the GPU-only version of Pulscan:
 
-1. Compile the local CDF library:
-
-   ```bash
-   gcc -c localcdflib.c -o localcdflib.o -lm -Ofast
-   ```
-
-2. Compile the Pulscan CPU version:
-
-   ```bash
-   gcc pulscan.c localcdflib.o -o pulscan -lm -fopenmp -Ofast
-   ```
+```bash
+nvcc pulscan_gpu.cu -o pulscan_gpu -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math
+```
 
 ### For Hybrid (CPU/GPU) Version
 
@@ -49,10 +41,18 @@ For the hybrid version that utilizes both CPU and GPU resources:
    nvcc pulscan_hybrid.cu localcdflib.o -o pulscan_hybrid -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math
    ```
 
-### For GPU Version
+### For CPU Version
 
-To compile the GPU-only version of Pulscan:
+To compile the CPU version of Pulscan, follow these steps:
 
-```bash
-nvcc pulscan_gpu.cu -o pulscan_gpu -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math
-```
+1. Compile the local CDF library:
+
+   ```bash
+   gcc -c localcdflib.c -o localcdflib.o -lm -Ofast
+   ```
+
+2. Compile the Pulscan CPU version:
+
+   ```bash
+   gcc pulscan.c localcdflib.o -o pulscan -lm -fopenmp -Ofast
+   ```
