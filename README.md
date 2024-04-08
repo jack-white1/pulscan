@@ -1,36 +1,61 @@
-# PULSCAN
+# Pulscan
 
-A PRESTO-compatible implementation of the (fast + approximate) boxcar acceleration search (in development) for detecting the signatures of binary pulsars in PRESTO .fft files.
+Pulscan is a high-performance pulsar searching tool that can run on CPUs as well as GPUs for accelerated computation. This tool is designed to analyze astronomical data for pulsar search, employing various computational optimizations for efficiency.
 
-**EXPECT LOWER SENSITIVITY THAN PRESTO'S ACCEL_SEARCH**
+## Prerequisites
 
+- GCC compiler for C code compilation
+- NVIDIA CUDA Toolkit for compiling and running GPU and hybrid codes
+- OpenMP for parallel computing on the CPU
 
+## Installation
 
-## INSTRUCTIONS
-`git clone https://github.com/jack-white1/pulscan`
+First, clone the Pulscan repository to your local machine:
 
-1. Compile with `gcc pulscan.c -o pulscan -lm -fopenmp -Ofast -ftree-vectorize -ffast-math -fopt-info-vec-optimized`
+```bash
+git clone https://github.com/jack-white1/pulscan
+cd pulscan
+```
 
-2. Run with `./pulscan FILENAME -ncpus XXX -zmax XXX - candidates XXX`
-    - REQUIRED argument `filename`
-    - OPTIONAL argument `-ncpus XXX` The (integer) number of OpenMP threads to use (default 1)
-    - OPTIONAL argument `-zmax XXX` The (integer) max boxcar width (default = 1200, max = the size of your input data)
-    - OPTIONAL argument `-candidates XXX` The (integer) number of candidates per boxcar width to produce
-    - The total number of candidates will be `zmax` * `candidates`
+### For CPU Version
 
-3. Post process the candidate file to make a human readable version with `python3 make_formatted_candidate_list.py PATH_TO_CANDIDATE_FILE.bctxtcand`
+To compile the CPU version of Pulscan, follow these steps:
 
-## EXAMPLE
-1. Use the included test data in the `./test_data/` directory, or dedisperse your filterbank with PRESTO's `prepsubband` and make your .fft file using PRESTO's `realfft` command
-2. `gcc pulscan.c -o pulscan -lm -fopenmp -Ofast -ftree-vectorize -ffast-math -fopt-info-vec-optimized`
-3. `./pulscan ./test_data/test.fft`
-4. `python3 make_formatted_candidate_list.py ./test_data/test.bctxtcand`
+1. Compile the local CDF library:
 
-## NOTES
-- The code is currently in development and is not yet fully functional
-- The code is not fully tested
-- _Output sigmas may be incorrect_
+   ```bash
+   gcc -c localcdflib.c -o localcdflib.o -lm -Ofast
+   ```
 
-## FUTURE WORK
-- Integrate harmonic summing
-- GPU version
+2. Compile the Pulscan CPU version:
+
+   ```bash
+   gcc pulscan.c localcdflib.o -o pulscan -lm -fopenmp -Ofast
+   ```
+
+### For Hybrid (CPU/GPU) Version
+
+For the hybrid version that utilizes both CPU and GPU resources:
+
+1. Compile the local CDF library (same as CPU version):
+
+   ```bash
+   gcc -c localcdflib.c -o localcdflib.o -lm -Ofast
+   ```
+
+2. Compile the Pulscan hybrid version:
+
+   ```bash
+   nvcc pulscan_hybrid.cu localcdflib.o -o pulscan_hybrid -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math
+   ```
+
+### For GPU Version
+
+To compile the GPU-only version of Pulscan:
+
+```bash
+nvcc pulscan_gpu.cu -o pulscan_gpu -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math
+```
+```
+
+Feel free to adjust the content to better suit your project's needs or preferences.
