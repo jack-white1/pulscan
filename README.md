@@ -46,7 +46,7 @@ nvcc pulscan_gpu.cu -o pulscan_gpu -lm -Xcompiler "-fopenmp -Ofast" --use_fast_m
 
 For the hybrid version that utilizes both CPU and GPU resources:
 
-1. Compile the local CDF library (same as CPU version):
+1. Compile the local CDF library:
 
    ```bash
    gcc -c localcdflib.c -o localcdflib.o -lm -Ofast

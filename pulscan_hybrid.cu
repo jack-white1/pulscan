@@ -381,7 +381,30 @@ __global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globa
 
         int outputCounter = 0;
         int targetZ = 0;
-        for (int z = 0; z < zmax; z++){
+
+        for (int stride = blockDim.x / 2; stride>0; stride >>= 1){
+            if (localThreadIndex < stride){
+                searchArray[localThreadIndex] = fmaxf(searchArray[localThreadIndex], searchArray[localThreadIndex + stride]);
+            }
+            __syncthreads();
+        }
+
+        if (localThreadIndex == 0){
+            localCandidateArray[outputCounter].power = searchArray[0];
+            localCandidateArray[outputCounter].r = blockIdx.x*blockDim.x;
+            localCandidateArray[outputCounter].z = 0;
+            localCandidateArray[outputCounter].numharm = numharm;
+            outputCounter+=1;
+        }
+
+        for (int z = 1; z < zmax; z++){
+            // sum the next element into the sum array
+            sumArray[localThreadIndex] = lookupArray[localThreadIndex + z];
+
+            // copy the sum array into the search array, as the search array will be reordered
+            searchArray[localThreadIndex] = sumArray[localThreadIndex];
+            __syncthreads();
+
             // search the searchArray if its a targetZ using a max reduction
             if (z == targetZ){
                 for (int stride = blockDim.x / 2; stride>0; stride >>= 1){
@@ -390,6 +413,7 @@ __global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globa
                     }
                     __syncthreads();
                 }
+
                 if (localThreadIndex == 0){
                     localCandidateArray[outputCounter].power = searchArray[0];
                     localCandidateArray[outputCounter].r = blockIdx.x*blockDim.x;
@@ -397,19 +421,9 @@ __global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globa
                     localCandidateArray[outputCounter].numharm = numharm;
                     outputCounter+=1;
                 }
-                if (targetZ == 0){
-                    targetZ = 1;
-                } else {
-                    targetZ *= 2;
-                }
+                targetZ *= 2;
                 __syncthreads();
             }
-
-            // sum the next element into the sum array
-            sumArray[localThreadIndex] = lookupArray[localThreadIndex + z];
-
-            // copy the sum array into the search array, as the search array will be reordered
-            searchArray[localThreadIndex] = sumArray[localThreadIndex];
         }
 
         __syncthreads();
@@ -417,6 +431,7 @@ __global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globa
         // copy the local candidate array into the global candidate array
         if (localThreadIndex < numCandidates){
             globalCandidateArray[blockIdx.x*numCandidates+localThreadIndex] = localCandidateArray[localThreadIndex];
+            printf("globalCandidateArray[%d] = %f\n", blockIdx.x*numCandidates+localThreadIndex, globalCandidateArray[blockIdx.x*numCandidates+localThreadIndex].power);
         }
     }
 }
@@ -490,7 +505,7 @@ float* compute_magnitude_block_normalization_mad(const char *filepath, int *magn
 
     double end = omp_get_wtime();
     double time_spent = end - start;
-    printf("Reading the data took      %f seconds using 1 thread\n", time_spent);
+    printf("Reading the data took:                  %f ms using 1 thread\n", 1000*time_spent);
 
     start = omp_get_wtime();
 
@@ -538,7 +553,7 @@ float* compute_magnitude_block_normalization_mad(const char *filepath, int *magn
 
     end = omp_get_wtime();
     time_spent = end - start;
-    printf("Normalizing the data took  %f seconds using %d thread(s)\n", time_spent, ncpus);
+    printf("Normalizing the data took               %f ms using %d thread(s)\n", 1000*time_spent, ncpus);
     return magnitude;
 }
 
@@ -559,7 +574,7 @@ const char* pulscan_frame =
 "  J. White, K. Adámek, J. Roy, S. Ransom, W. Armour  2023\n\n";
 
 int main(int argc, char* argv[]){
-    int debug = 1;
+    int debug = 0;
     printf("%s\n", pulscan_frame);
 
     // start high resolution timer to measure gpu initialisation time using chrono
@@ -583,8 +598,10 @@ int main(int argc, char* argv[]){
     int ncpus = 72;
     int zmax = 256;
     int log2zmax = (int)floor(log2((double)zmax));
-    zmax = 2 << log2zmax;
-    int numCandidates = log2zmax;
+    printf("zmax = %d\n", zmax);                       //  ______   ________________ 
+    printf("log2zmax = %d\n", log2zmax);               // |  +2  | |  +log2(zmax)   |
+    int numCandidates = log2zmax + 2;                  //  0,   1,  2,  4, ..., zmax
+    printf("numCandidates = %d\n", numCandidates);
 
     // define filepath variable
     const char* filepath = argv[1];
@@ -622,7 +639,7 @@ int main(int argc, char* argv[]){
     cudaEventSynchronize(stop);
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
-    printf("Magnitude took:                         %f ms\n", milliseconds);
+    printf("Copying data to GPU took:               %f ms\n", milliseconds);
 
     // start timing
     cudaEventCreate(&start);
@@ -727,16 +744,54 @@ int main(int argc, char* argv[]){
     // write the candidates to a csv file with a header line
     //FILE *csvFile = fopen("gpucandidates.csv", "w");
     FILE *csvFile = fopen(outputFilename, "w");
-    fprintf(csvFile, "r,z,power,sigma,numharm\n");
+    fprintf(csvFile, "sigma,r,z,numharm\n");
 
-    float sigmaThreshold = 6;
+    float sigmaThreshold = 0;
+
+    candidate* sortedCandidateArray = (candidate*)malloc(sizeof(candidate)*log2zmax*(numBlocksBoxcar1+numBlocksBoxcar2+numBlocksBoxcar3+numBlocksBoxcar4));
+    int sortedCandidateArrayIndex = 0;
+
+    double num_independent_trials = ((double)numCandidates)*((double)numMagnitudes)/6.95;
+    printf("num_independent_trials: %f\n", num_independent_trials);
+    printf("numCandidates: %d\n", numCandidates);
+    printf("zmax: %d\n", zmax);
 
     for (int i = 0; i < log2zmax*(numBlocksBoxcar1+numBlocksBoxcar2+numBlocksBoxcar3+numBlocksBoxcar4); i++){
-        hostMergedCandidateArray[i].sigma = candidate_sigma(hostMergedCandidateArray[i].power, hostMergedCandidateArray[i].numharm, numMagnitudes);
+        int degrees_of_freedom = 1;
+        if (hostMergedCandidateArray[i].numharm == 1){
+            degrees_of_freedom  = 1;
+        } else if (hostMergedCandidateArray[i].numharm == 2){
+            degrees_of_freedom  = 3;
+        } else if (hostMergedCandidateArray[i].numharm == 3){
+            degrees_of_freedom  = 6;
+        } else if (hostMergedCandidateArray[i].numharm == 4){
+            degrees_of_freedom  = 10;
+        }
+
+        
+        hostMergedCandidateArray[i].sigma = candidate_sigma(hostMergedCandidateArray[i].power*0.5, (hostMergedCandidateArray[i].z+1)*degrees_of_freedom, num_independent_trials);
+        //printf("r: %d, z: %d, power: %f, sigma: %f, numharm: %d\n", hostMergedCandidateArray[i].r, hostMergedCandidateArray[i].z, hostMergedCandidateArray[i].power, hostMergedCandidateArray[i].sigma, hostMergedCandidateArray[i].numharm);
         if (hostMergedCandidateArray[i].sigma > sigmaThreshold){
-            fprintf(csvFile, "%d,%d,%f,%f,%d\n", hostMergedCandidateArray[i].r, hostMergedCandidateArray[i].z, hostMergedCandidateArray[i].power, hostMergedCandidateArray[i].sigma, hostMergedCandidateArray[i].numharm);
+            sortedCandidateArray[sortedCandidateArrayIndex] = hostMergedCandidateArray[i];
+            sortedCandidateArrayIndex += 1;
+            //fprintf(csvFile, "%d,%d,%f,%f,%d\n", hostMergedCandidateArray[i].r, hostMergedCandidateArray[i].z, hostMergedCandidateArray[i].power, hostMergedCandidateArray[i].sigma, hostMergedCandidateArray[i].numharm);
         }
     }
+
+    // sort the candidate array by sigma
+    qsort(sortedCandidateArray, sortedCandidateArrayIndex, sizeof(candidate), [](const void* a, const void* b) -> int {
+        candidate* candidateA = (candidate*)a;
+        candidate* candidateB = (candidate*)b;
+        if (candidateA->sigma < candidateB->sigma) return 1;
+        if (candidateA->sigma > candidateB->sigma) return -1;
+        return 0;
+    });
+
+    // write the sorted candidates to the csv file
+    for (int i = 0; i < sortedCandidateArrayIndex; i++){
+        fprintf(csvFile, "%f,%d,%d,%d\n", sortedCandidateArray[i].sigma, sortedCandidateArray[i].r, sortedCandidateArray[i].z, sortedCandidateArray[i].numharm);
+    }
+
 
     fclose(csvFile);
 
