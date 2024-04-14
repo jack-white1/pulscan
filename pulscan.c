@@ -509,7 +509,7 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
                                 candidate_struct* global_candidates, int* global_candidates_array_index) {
 
     // make a copy of the input magnitudes array
-    float* magnitudes_array = malloc(sizeof(float) * magnitudes_array_length);
+    float* magnitudes_array = (float*)malloc(sizeof(float) * magnitudes_array_length);
     memcpy(magnitudes_array, input_magnitudes_array, sizeof(float) * magnitudes_array_length);
 
     // Extract file name without extension
@@ -861,62 +861,6 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
         }
     }
 
-    /*
-
-
-    // count the number of non-zero candidates in the candidates array
-    int num_candidates = 0;
-    for (int i = 0; i < num_blocks * zmax; i++){
-        if (candidates[i].power > 0 ) {
-            
-            if (candidates[i].sigma > sigma_threshold){
-                num_candidates++;
-            }
-        }
-    }
-
-    candidate_struct* final_output_candidates = (candidate_struct*) malloc(sizeof(candidate_struct) *  num_candidates);
-    memset(final_output_candidates, 0, sizeof(candidate_struct) * num_candidates);
-    int candidate_index = 0;
-    for (int i = 0; i < num_blocks * zmax; i++){
-        if (candidates[i].sigma > sigma_threshold){
-            final_output_candidates[candidate_index] = candidates[i];
-            candidate_index++;
-        }
-    }
-
-    // sort final_output_candidates by descending sigma using qsort
-    qsort(final_output_candidates, num_candidates, sizeof(candidate_struct), compare_candidate_structs_sigma);
-
-    float temp_period_ms;
-    float temp_frequency;
-    float temp_fdot;
-    float temp_acceleration;
-    float temp_logp;
-
-    // write final_output_candidates to text file with physical measurements
-    for (int i = 0; i < num_candidates; i++){
-        if (final_output_candidates[i].sigma > sigma_threshold){
-            temp_period_ms = period_ms_from_frequency(frequency_from_observation_time_seconds(observation_time_seconds,final_output_candidates[i].index));
-            temp_frequency = frequency_from_observation_time_seconds(observation_time_seconds,final_output_candidates[i].index);
-            temp_fdot = fdot_from_boxcar_width(final_output_candidates[i].z, observation_time_seconds);
-            temp_acceleration = acceleration_from_fdot(fdot_from_boxcar_width(final_output_candidates[i].z, observation_time_seconds), frequency_from_observation_time_seconds(observation_time_seconds,final_output_candidates[i].index));
-            temp_logp = chi2_logp(final_output_candidates[i].power, degrees_of_freedom * final_output_candidates[i].z * 2);
-            fprintf(text_candidates_file, "%10.6lf %10.4f %10.6f %14.6f %10ld %14.8f %10d %14.6f %14.6f %10d\n", 
-                final_output_candidates[i].sigma,
-                final_output_candidates[i].power,
-                temp_period_ms,
-                temp_frequency,
-                final_output_candidates[i].index,
-                temp_fdot,
-                final_output_candidates[i].z,
-                temp_acceleration,
-                temp_logp,
-                nharmonics);
-        }
-    }
-    */
-
     end = omp_get_wtime();
     time_spent = end - start;
     printf("Producing output took      %f seconds using 1 thread\n", time_spent);
@@ -993,11 +937,11 @@ void profile_chi2_logp(){
 
 const char* pulscan_frame = 
 "    .          .     .     *        .   .   .     .\n"
-"         "BOLD"___________      . __"RESET" .  .   *  .   .  .  .     .\n"
-"    . *   "BOLD"_____  __ \\__+ __/ /_____________ _____"RESET" .    "FLASHING"*"RESET"  .\n"
-"  +    .   "BOLD"___  /_/ / / / / / ___/ ___/ __ `/ __ \\"RESET"     + .\n"
-" .          "BOLD"_  ____/ /_/ / (__  ) /__/ /_/ / / / /"RESET" .  *     . \n"
-"       .    "BOLD"/_/ *  \\__,_/_/____/\\___/\\__,_/_/ /_/"RESET"    \n"
+"         " BOLD "___________      . __" RESET " .  .   *  .   .  .  .     .\n"
+"    . *   " BOLD "_____  __ \\__+ __/ /_____________ _____" RESET " .    " FLASHING "*" RESET "  .\n"
+"  +    .   " BOLD "___  /_/ / / / / / ___/ ___/ __ `/ __ \\" RESET "     + .\n"
+" .          " BOLD "_  ____/ /_/ / (__  ) /__/ /_/ / / / /" RESET " .  *     . \n"
+"       .    " BOLD "/_/ *  \\__,_/_/____/\\___/\\__,_/_/ /_/" RESET "    \n"
 "    *    +     .     .     . +     .     +   .      *   +\n"
 
 "  J. White, K. Adámek, J. Roy, S. Ransom, W. Armour  2023\n\n";
@@ -1016,11 +960,11 @@ int main(int argc, char *argv[]) {
         printf("\t-ncpus [int]\t\tThe number of OpenMP threads to use (default 1)\n");
         printf("\t-zmax [int]\t\tThe max boxcar width (default = 200, similar meaning to zmax in accelsearch)\n");
         printf("\t-numharm [int]\t\tThe maximum number of harmonics to sum (default = 1, options are 1, 2, 3 or 4)\n");
-        printf("\t-tobs [float]\t\tThe observation time in seconds, this "BOLD"MUST BE SPECIFIED ACCURATELY"RESET" if you want physical frequency/acceleration values.\n");
+        printf("\t-tobs [float]\t\tThe observation time in seconds, this " BOLD "MUST BE SPECIFIED ACCURATELY" RESET " if you want physical frequency/acceleration values.\n");
         printf("\t-sigma [float]\t\tThe sigma threshold (default = 2.0), candidates with sigma below this value will not be written to the output file\n");
         printf("\t-zstep [int]\t\tThe step size in z (default = 2).\n");
         printf("\t-blockwidth [int]\tThe block width (units are r-bins, default = 32768), you will get up to ( rmax * zmax ) / ( blockwidth * zstep ) candidates\n");
-        printf("\t-turbo [int]\t\t"BOLD ITALIC RED"T"GREEN"U"YELLOW"R"BLUE"B"MAGENTA"O"RESET" mode - increase speed by trading off candidate localisation accuracy (default off = 0, options are 0, 1, 2, 3)\n");
+        printf("\t-turbo [int]\t\t" BOLD ITALIC RED "T" GREEN "U" YELLOW "R" BLUE "B" MAGENTA "O" RESET " mode - increase speed by trading off candidate localisation accuracy (default off = 0, options are 0, 1, 2, 3)\n");
         printf("\t\t\t\t  -turbo 0: Localise candidates to their exact (r,z) bin location (default setting)\n");
         printf("\t\t\t\t  -turbo 1: Only localise candidates to their chunk of the frequency spectrum. This will only give the r-bin to within -blockwidth accuracy\n");
         printf("\t\t\t\t  -turbo 2: Option 1 and fix -zstep at 2. Automatically enabled if -turbo 1 and -zstep left as default. THIS WILL OVERRIDE THE -zstep FLAG.\n");
@@ -1128,7 +1072,7 @@ int main(int argc, char *argv[]) {
 
     if ((turbomode == 1) && (z_step == 2)){
         turbomode = 2;
-        printf(GREEN"Automatically enabled turbo mode 2 as turbo mode = 1 and zstep = 2\n\n"RESET);
+        printf(GREEN "Automatically enabled turbo mode 2 as turbo mode = 1 and zstep = 2\n\n" RESET);
     }
 
     if (candidate_sigma_profile > 0){
