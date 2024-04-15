@@ -18,6 +18,7 @@ extern "C" {
 #include <cuda_runtime.h>
 #include <cuda.h>
 
+
 #define SPEED_OF_LIGHT 299792458.0
 
 // ANSI Color Codes
@@ -364,10 +365,49 @@ int compare_floats_median(const void *a, const void *b) {
     return 0;
 }
 
-float* compute_magnitude_chunk_normalization_mad(const char *filepath, int *magnitude_size, int ncpus, int zmax) {
+void normalize_chunk(float* chunk, size_t chunk_size) {
+    if (chunk_size == 0) return;
+
+    // Compute the median
+    float* sorted_chunk = (float*) malloc(sizeof(float) * chunk_size);
+    memcpy(sorted_chunk, chunk, sizeof(float) * chunk_size);
+    qsort(sorted_chunk, chunk_size, sizeof(float), compare_floats_median);
+
+    float median;
+    if (chunk_size % 2 == 0) {
+        median = (sorted_chunk[chunk_size/2 - 1] + sorted_chunk[chunk_size/2]) / 2.0f;
+    } else {
+        median = sorted_chunk[chunk_size/2];
+    }
+
+    // Compute the MAD
+    for (size_t i = 0; i < chunk_size; i++) {
+        sorted_chunk[i] = fabs(sorted_chunk[i] - median);
+    }
+    qsort(sorted_chunk, chunk_size, sizeof(float), compare_floats_median);
+
+    float mad = chunk_size % 2 == 0 ?
+                (sorted_chunk[chunk_size/2 - 1] + sorted_chunk[chunk_size/2]) / 2.0f :
+                sorted_chunk[chunk_size/2];
+
+    free(sorted_chunk);
+
+    // scale the mad by the constant scale factor k
+    float k = 1.4826f; // 1.4826 is the scale factor to convert mad to std dev for a normal distribution https://en.wikipedia.org/wiki/Median_absolute_deviation
+    mad *= k;
+
+    // Normalize the chunk
+    if (mad != 0) {
+        for (size_t i = 0; i < chunk_size; i++) {
+            chunk[i] = (chunk[i] - median) / mad;
+        }
+    }
+}
+
+float* compute_magnitude_chunk_normalization_mad(const char *filepath, int *magnitude_size, int ncpus, int max_boxcar_width) {
     // begin timer for reading input file
     double start = omp_get_wtime();
-    size_t chunk_size = zmax * 30; // needs to be much larger than max boxcar width
+    size_t chunk_size = max_boxcar_width * 30; // needs to be much larger than max boxcar width
 
     //printf("Reading file: %s\n", filepath);
 
@@ -481,102 +521,65 @@ void decimate_array_4(float* input_array, float* output_array, int input_array_l
     }
 }
 
-__global__ void boxcarFilterKernel(float* magnitudesArray, candidate_struct_short* candidatesArray, int chunkSize, int zmax, int zstep, int nharmonics){
-    // Allocate dynamic shared memory
-    extern __shared__ char shared_memory[];
-
-    int lookupArraySize = (chunkSize + zmax) * sizeof(float);
-    int sumArraySize = chunkSize * sizeof(float);
-    //int searchReduceArraySize = blockDim.x * sizeof(power_index_struct);
-
-    // Calculate starting points using the char pointer
-    float* lookupArray = (float*)shared_memory;
-    float* sumArray = (float*)&shared_memory[lookupArraySize];
-    power_index_struct* searchReduceArray = (power_index_struct*)&shared_memory[lookupArraySize + sumArraySize];
-
-    int localIndex;
-    int globalIndex;
-
-    int numIterationsToFillLookupArray = (chunkSize + zmax + blockDim.x - 1)/blockDim.x;
-
-    // fill lookuparray from magnitudesArray
-    for (int i = 0; i < numIterationsToFillLookupArray;  i++){
-        localIndex = threadIdx.x + i * blockDim.x;
-        globalIndex = blockIdx.x * chunkSize + localIndex;
-        if (localIndex < chunkSize + zmax){
-            lookupArray[localIndex] = magnitudesArray[globalIndex];
-        }
+__global__ void sumArrayKernel(float* sum_array, float* lookup_array, int z, int valid_length){
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index < valid_length){
+        sum_array[index] = sum_array[index] + lookup_array[index + z];
     }
+}
 
-    int numIterationsToCoverChunk = (chunkSize + blockDim.x - 1)/blockDim.x;
-    
-    // set sumArray to zero
-    for (int i = 0; i < numIterationsToCoverChunk; i++){
-        localIndex = threadIdx.x + i * blockDim.x;
-        if (localIndex < chunkSize){
-            sumArray[localIndex] = 0.0;
-        }
-    }
+__global__ void searchArrayKernel(float* global_search_array, candidate_struct_short* global_candidates_array, int candidate_index, int num_candidates, int z, int nharmonics){
+    extern __shared__ power_index_struct shared_memory[];
+    int globalThreadIndex = blockIdx.x * blockDim.x + threadIdx.x;
+    int localThreadIndex = threadIdx.x;
 
-    float localMaxPower = 0;
-    int localMaxIndex;
-    int outputIndex = 0;
+    shared_memory[localThreadIndex].power = global_search_array[globalThreadIndex];
+    shared_memory[localThreadIndex].index = globalThreadIndex;
 
-
-    for (int z = 0; z < zmax; z++){
-        for (int i = 0; i < numIterationsToCoverChunk; i ++){
-            localIndex = threadIdx.x + i * blockDim.x;
-            if (localIndex < chunkSize){
-                sumArray[localIndex] += lookupArray[localIndex + z];
-            }
-        }
-
+    for (int stride = blockDim.x/2; stride > 0; stride /= 2){
         __syncthreads();
-
-        if (z % zstep == 0){
-            localMaxPower = 0;
-            localMaxIndex = 0;
-            for (int i = 0; i < numIterationsToCoverChunk; i++){
-                localIndex = threadIdx.x + i * blockDim.x;
-                if (localIndex < chunkSize){
-                    if (sumArray[localIndex] > localMaxPower){
-                        localMaxPower = sumArray[localIndex];
-                        localMaxIndex = chunkSize * blockIdx.x + localIndex;
-                    }
-                }
+        if (localThreadIndex < stride){
+            if (shared_memory[localThreadIndex].power < shared_memory[localThreadIndex + stride].power){
+                shared_memory[localThreadIndex] = shared_memory[localThreadIndex + stride];
             }
-            searchReduceArray[threadIdx.x].power = localMaxPower;
-            searchReduceArray[threadIdx.x].index = localMaxIndex;
-
-            __syncthreads();
-
-            for (int stride = blockDim.x/2; stride > 0; stride /= 2){
-                if (threadIdx.x < stride){
-                    if (searchReduceArray[threadIdx.x].power < searchReduceArray[threadIdx.x + stride].power){
-                        searchReduceArray[threadIdx.x] = searchReduceArray[threadIdx.x + stride];
-                    }
-                }
-                __syncthreads();
-            }
-
-            if (threadIdx.x == 0){
-                candidatesArray[blockIdx.x*(zmax/zstep) + outputIndex].power = searchReduceArray[0].power;
-                candidatesArray[blockIdx.x*(zmax/zstep) + outputIndex].index = searchReduceArray[0].index;
-                candidatesArray[blockIdx.x*(zmax/zstep) + outputIndex].z = z;
-                candidatesArray[blockIdx.x*(zmax/zstep) + outputIndex].harmonic = nharmonics;
-            }
-            outputIndex++;
         }
     }
 
     __syncthreads();
-
-
+    if (localThreadIndex == 0){
+        global_candidates_array[blockIdx.x*num_candidates + candidate_index].power = shared_memory[0].power;
+        global_candidates_array[blockIdx.x*num_candidates + candidate_index].index = shared_memory[0].index;
+        global_candidates_array[blockIdx.x*num_candidates + candidate_index].z = z;
+        global_candidates_array[blockIdx.x*num_candidates + candidate_index].harmonic = nharmonics;
+    }
 
 }
 
+__global__ void 
+
+void copy_first_10_elements_to_host_and_print(float* deviceArray){
+    float* hostArray = (float*) malloc(sizeof(float)*10);
+    cudaMemcpy(hostArray, deviceArray, sizeof(float)*10, cudaMemcpyDeviceToHost);
+    for (int i = 0; i < 10; i++){
+        printf("hostArray[%d] = %f\n", i, hostArray[i]);
+    }
+    free(hostArray);
+}
+
+void copy_first_10_candidates_to_host_and_print(candidate_struct_short* deviceArray){
+    candidate_struct_short* hostArray = (candidate_struct_short*) malloc(sizeof(candidate_struct_short)*10);
+    cudaMemcpy(hostArray, deviceArray, sizeof(candidate_struct_short)*10, cudaMemcpyDeviceToHost);
+    for (int i = 0; i < 10; i++){
+        printf("hostArray[%d].power = %f\n", i, hostArray[i].power);
+        printf("hostArray[%d].index = %d\n", i, hostArray[i].index);
+        printf("hostArray[%d].z = %d\n", i, hostArray[i].z);
+        printf("hostArray[%d].harmonic = %d\n", i, hostArray[i].harmonic);
+    }
+    free(hostArray);
+}
+
 void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int magnitudes_array_length, \
-                                int zmax, const char *filename, 
+                                int max_boxcar_width, const char *filename, 
                                 float observation_time_seconds, float sigma_threshold, int z_step, \
                                 int chunkwidth, int ncpus, int nharmonics, int turbomode, int max_harmonics,
                                 candidate_struct* global_candidates, int* global_candidates_array_index) {
@@ -592,7 +595,7 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
 
     // Create new filename
     char text_filename[255];
-    snprintf(text_filename, 255, "%s_ZMAX_%d_NUMHARM_%d_TURBO_%d.pulscand", base_name, zmax, max_harmonics,turbomode);
+    snprintf(text_filename, 255, "%s_ZMAX_%d_NUMHARM_%d_TURBO_%d.pulscand", base_name, max_boxcar_width,max_harmonics,turbomode);
     
     // open the file for writing.
     FILE *text_candidates_file = fopen(text_filename, "a");
@@ -693,63 +696,85 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
     int valid_length = magnitudes_array_length;
     int initial_length = magnitudes_array_length;
 
-    double num_independent_trials = ((double)zmax)*((double)initial_length)/6.95; // 6.95 from eqn 6 in Anderson & Ransom 2018
+    double num_independent_trials = ((double)max_boxcar_width)*((double)initial_length)/6.95; // 6.95 from eqn 6 in Anderson & Ransom 2018
 
-    int num_candidates_per_chunk = zmax / z_step;
+    int num_candidates_per_chunk = max_boxcar_width;
 
     int num_chunks = (valid_length + chunkwidth - 1) / chunkwidth;
+
+    //int num_chunks = num_chunks;
+
+    candidate_struct* candidates = (candidate_struct*) malloc(sizeof(candidate_struct) *  num_chunks * num_candidates_per_chunk);
+    //memset candidate_structs to zero
+    memset(candidates, 0, sizeof(candidate_struct) * num_chunks * num_candidates_per_chunk);
     
     // begin timer for boxcar filtering
     double start = omp_get_wtime();
 
     // allocate memory on GPU for magnitudes array
-    float* device_magnitudes_array;
-    cudaMalloc(&device_magnitudes_array, sizeof(float) * magnitudes_array_length);
-    cudaMemcpy(device_magnitudes_array, magnitudes_array, sizeof(float) * magnitudes_array_length, cudaMemcpyHostToDevice);
+    float* device_lookup_array;
+    float* device_sum_array;
+    float* device_search_array;
 
-    // allocate memory on GPU for candidates array
     candidate_struct_short* device_candidates;
-    cudaMalloc(&device_candidates, sizeof(candidate_struct_short) * num_chunks * num_candidates_per_chunk);
 
-    int numThreadsPerBlock = 256;
-    int numBlocks = num_chunks;
+    cudaMalloc((void**)&device_lookup_array, sizeof(float)*magnitudes_array_length);
+    cudaMalloc((void**)&device_sum_array, sizeof(float)*magnitudes_array_length);
+    cudaMalloc((void**)&device_search_array, sizeof(float)*magnitudes_array_length);
+    cudaMalloc((void**)&device_candidates, sizeof(candidate_struct_short)*num_chunks*num_candidates_per_chunk);
 
-    size_t lookupArraySize = (chunkwidth + zmax) * sizeof(float);
-    size_t sumArraySize = chunkwidth * sizeof(float);
-    size_t searchReduceArraySize = numThreadsPerBlock * sizeof(power_index_struct);
+    // copy magnitudes array to device
+    cudaMemcpy(device_lookup_array, magnitudes_array, sizeof(float)*magnitudes_array_length, cudaMemcpyHostToDevice);
 
-    size_t shared_memory_size = lookupArraySize + sumArraySize + searchReduceArraySize;
+    // initialise sum and search array to zero
+    cudaMemset(device_sum_array, 0, sizeof(float)*magnitudes_array_length);
+    cudaMemset(device_search_array, 0, sizeof(float)*magnitudes_array_length);
 
-    printf("shared_memory_size = %ld\n", shared_memory_size);
-
-
-
-
-    // print all arguments before calling kernel
-    printf("numBlocks = %d, numThreadsPerBlock = %d, shared_memory_size = %ld\n", numBlocks, numThreadsPerBlock, shared_memory_size);
-    boxcarFilterKernel<<<numBlocks, numThreadsPerBlock, shared_memory_size>>>(device_magnitudes_array, device_candidates, chunkwidth, zmax, z_step, nharmonics);
-    // get last cuda error
-    cudaError_t cudaError = cudaGetLastError();
-    if (cudaError != cudaSuccess) {
-        printf("CUDA error: %s\n", cudaGetErrorString(cudaError));
+    // ensure chunkwidth is a power of 2
+    if ((chunkwidth & (chunkwidth - 1)) != 0) {
+        printf("ERROR: chunkwidth must be a power of 2\n");
+        return;
     }
-    cudaDeviceSynchronize();
+
+    // ensure chunkwidth is <= 1024
+    if (chunkwidth > 1024) {
+        printf("ERROR: chunkwidth must be <= 1024\n");
+        return;
+    }
+
+    int validLength = magnitudes_array_length - max_boxcar_width;
+
+    int sumThreadsPerBlock = 1024;
+    int sumNumBlocks = (validLength + sumThreadsPerBlock - 1) / sumThreadsPerBlock;
+
+    int searchThreadsPerBlock = chunkwidth;
+    int searchNumBlocks = (validLength + searchThreadsPerBlock - 1) / searchThreadsPerBlock;
+
+    int z = 0;
+    int candidate_offset = 0;
+    while (z < max_boxcar_width){
+        cudaDeviceSynchronize();
+        // sum the sum array with the lookup array (offset index)
+        sumArrayKernel<<<sumNumBlocks, sumThreadsPerBlock>>>(device_sum_array, device_lookup_array, z, validLength);
+
+        printf("z=%d\n", z);
+        //copy_first_10_elements_to_host_and_print(device_sum_array);
+
+        // if z % z_step == 0, then copy sum array to search array and search it
+        if (z % z_step == 0){
+            cudaMemcpy(device_search_array, device_sum_array, sizeof(float)*magnitudes_array_length, cudaMemcpyDeviceToDevice);
+            searchArrayKernel<<<searchNumBlocks, searchThreadsPerBlock, searchThreadsPerBlock*sizeof(power_index_struct)>>>(device_search_array, device_candidates, candidate_offset, num_candidates_per_chunk, z, nharmonics);
+            cudaDeviceSynchronize();
+            copy_first_10_candidates_to_host_and_print(device_candidates);
+            candidate_offset++;
+        }
+
+        z++;
+    }
 
 
-
-    // copy candidates to host and print
-    candidate_struct_short* hostCopyCandidates;
-    hostCopyCandidates = (candidate_struct_short*) malloc(sizeof(candidate_struct_short) * num_chunks * num_candidates_per_chunk);
-    cudaMemcpy(hostCopyCandidates, device_candidates, sizeof(candidate_struct_short) * num_chunks * num_candidates_per_chunk, cudaMemcpyDeviceToHost);
-    printf("num_chunks * num_candidates_per_chunk = %d\n", num_chunks * num_candidates_per_chunk);
-    //for (int i = 0; i < num_chunks * num_candidates_per_chunk; i++){
-    //    printf("i: %d, power: %f, index: %d, z: %d, harmonic: %d\n", i, hostCopyCandidates[i].power, hostCopyCandidates[i].index, hostCopyCandidates[i].z, hostCopyCandidates[i].harmonic);
-    //}
 
     // end timer for boxcar filtering
-
-
-
     double end = omp_get_wtime();
 
     double time_spent = end - start;
@@ -767,15 +792,10 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
         degrees_of_freedom  = 10;
     }
 
-    double tempsigma;
     for (int i = 0; i < num_chunks * num_candidates_per_chunk; i++){
-        tempsigma = candidate_sigma(hostCopyCandidates[i].power*0.5, (hostCopyCandidates[i].z+1)*degrees_of_freedom, num_independent_trials);
-        if (tempsigma > sigma_threshold){
-            global_candidates[*global_candidates_array_index].power = hostCopyCandidates[i].power;
-            global_candidates[*global_candidates_array_index].index = hostCopyCandidates[i].index;
-            global_candidates[*global_candidates_array_index].z = hostCopyCandidates[i].z;
-            global_candidates[*global_candidates_array_index].harmonic = hostCopyCandidates[i].harmonic;
-            global_candidates[*global_candidates_array_index].sigma = tempsigma;
+        candidates[i].sigma = candidate_sigma(candidates[i].power*0.5, (candidates[i].z+1)*degrees_of_freedom, num_independent_trials);
+        if (candidates[i].sigma > sigma_threshold){
+            global_candidates[*global_candidates_array_index] = candidates[i];
             *global_candidates_array_index = *global_candidates_array_index + 1;
         }
     }
@@ -786,10 +806,73 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
 
     fclose(text_candidates_file);
     free(base_name);
-    free(hostCopyCandidates);
+    free(candidates);
     //free(final_output_candidates);
 
 }
+
+
+void profile_candidate_sigma(){
+    // open csv file for writing
+    FILE *csv_file = fopen("candidate_sigma_profile.csv", "w"); // open the file for writing. Make sure you have write access in this directory.
+    if (csv_file == NULL) {
+        printf("Could not open file for writing candidate sigma profile.\n");
+        return;
+    }
+    fprintf(csv_file, "sigma, power, z, num_independent_trials\n");
+
+    for (int num_independent_trials = 65536; num_independent_trials < 1073741824; num_independent_trials*=2){
+        for (int z = 1; z < 1200; z++){
+            printf("z = %d\n", z);
+            for (double target_sigma = 1.0; target_sigma < 30.0; target_sigma+=1.0){
+                printf("target_sigma = %lf\n", target_sigma);
+                // increase power in steps of 0.1 until output sigma is above target sigma
+                double power = 0.0;
+                double output_sigma = 0.0;
+                while (output_sigma < target_sigma){
+                    power += 0.1;
+                    output_sigma = candidate_sigma(power*0.5, z, num_independent_trials);
+                }
+                fprintf(csv_file, "%lf,%lf,%d,%d\n", output_sigma, power, z, num_independent_trials);
+                printf("z = %d, power = %lf, output_sigma = %lf, num_independent = %d\n", z, power, output_sigma, num_independent_trials);
+            }
+        }
+    }
+    fclose(csv_file);
+}
+
+// a function to profile and compare the following functions:
+// double chi2_logp(double chi2, double dof)
+// float chi2_logp_fast(double chi2, double dof)
+// double chi2_logp_old(double chi2, double dof)
+
+
+void profile_chi2_logp(){
+    // open csv file for writing
+    FILE *csv_file = fopen("chi2_logp_profile.csv", "w"); // open the file for writing. Make sure you have write access in this directory.
+    printf("Writing chi2_logp profile to chi2_logp_profile.csv\n");
+    if (csv_file == NULL) {
+        printf("Could not open file for writing chi2_logp profile.\n");
+        return;
+    }
+    fprintf(csv_file, "chi2,dof,logp\n");
+    printf("written header\n");
+
+    for (double dof = 1; dof < 5000.0; dof+=50.49495){
+        for (double chi2 = 1; chi2 < 5000.0; chi2+=50.49495){
+            printf("calculating chi2_logp...\n");
+            double chi2_logp_result = chi2_logp(chi2, dof);
+            //printf("calculating chi2_logp_fast...\n");
+            //double chi2_logp_fast_result = chi2_logp_fast(chi2, dof);
+            //printf("calculating chi2_logp_old...\n");
+            //double chi2_logp_old_result = chi2_logp_old(chi2, dof);
+            //fprintf(csv_file, "%lf,%lf,%lf,%lf,%lf\n", chi2, dof, chi2_logp_result, chi2_logp_fast_result, chi2_logp_old_result);
+            fprintf(csv_file, "%lf,%lf,%lf\n", chi2, dof, chi2_logp_result);
+        }
+    }
+    fclose(csv_file);
+}
+
 
 const char* pulscan_frame = 
 "    .          .     .     *        .   .   .     .\n"
@@ -826,6 +909,9 @@ int main(int argc, char *argv[]) {
         printf("\t\t\t\t  -turbo 1: Only localise candidates to their chunk of the frequency spectrum. This will only give the r-bin to within -chunkwidth accuracy\n");
         printf("\t\t\t\t  -turbo 2: Option 1 and fix -zstep at 2. Automatically enabled if -turbo 1 and -zstep left as default. THIS WILL OVERRIDE THE -zstep FLAG.\n");
         printf("\t\t\t\t  -turbo 3: Use logarithmically-spaced zsteps (1,2,4,8,...). THIS WILL OVERRIDE THE -zstep FLAG. \n\n");
+
+        //printf("\t-candidate_sigma_profile\t\tProfile the candidate sigma function and write the results to candidate_sigma_profile.csv (you probably don't want to do this, default = 0)\n");
+        //printf("\t-profile_chi2_logp\t\tProfile the chi2_logp function and write the results to chi2_logp_profile.csv (you probably don't want to do this, default = 0)\n");
         return 1;
     }
 
@@ -897,6 +983,24 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // Get the candidate sigma profile flag from the command line arguments
+    // If not provided, default to 0
+    int candidate_sigma_profile = 0;
+    for (int i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "-candidate_sigma_profile") == 0 && i+1 < argc) {
+            candidate_sigma_profile = atoi(argv[i+1]);
+        }
+    }
+
+    // Get the chi2_logp profile flag from the command line arguments
+    // If not provided, default to 0
+    int profile_chi2_logp_flag = 0;
+    for (int i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "-profile_chi2_logp") == 0 && i+1 < argc) {
+            profile_chi2_logp_flag = atoi(argv[i+1]);
+        }
+    }
+
     // Get the chunk width from the command line arguments
     // If not provided, default to 32768
     int chunkwidth = 32768;
@@ -909,6 +1013,18 @@ int main(int argc, char *argv[]) {
     if ((turbomode == 1) && (z_step == 2)){
         turbomode = 2;
         printf(GREEN "Automatically enabled turbo mode 2 as turbo mode = 1 and zstep = 2\n\n" RESET);
+    }
+
+    if (candidate_sigma_profile > 0){
+        profile_candidate_sigma();
+        printf("Candidate sigma profile written to candidate_sigma_profile.csv\n");
+        return 0;
+    }
+
+    if (profile_chi2_logp_flag > 0){
+        profile_chi2_logp();
+        printf("chi2_logp profile written to chi2_logp_profile.csv\n");
+        return 0;
     }
 
     omp_set_num_threads(ncpus);
@@ -928,7 +1044,7 @@ int main(int argc, char *argv[]) {
 
     // Create new filename
     char text_filename[255];
-    snprintf(text_filename, 255, "%s_ZMAX_%d_NUMHARM_%d_TURBO_%d.pulscand", base_name, zmax, nharmonics, turbomode);
+    snprintf(text_filename, 255, "%s_ZMAX_%d_NUMHARM_%d_TURBO_%d.pulscand", base_name, zmax,nharmonics,turbomode);
 
     FILE *text_candidates_file = fopen(text_filename, "w"); // open the file for writing. Make sure you have write access in this directory.
     if (text_candidates_file == NULL) {
