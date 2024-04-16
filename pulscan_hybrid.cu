@@ -579,7 +579,7 @@ __global__ void boxcarFilterKernel(float* magnitudesArray, candidate_struct_shor
 void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int magnitudes_array_length, \
                                 int zmax, const char *filename, 
                                 float observation_time_seconds, float sigma_threshold, int z_step, \
-                                int chunkwidth, int ncpus, int nharmonics, int turbomode, int max_harmonics,
+                                int chunkwidth, int ncpus, int nharmonics, int max_harmonics,
                                 candidate_struct* global_candidates, int* global_candidates_array_index) {
 
     // make a copy of the input magnitudes array
@@ -593,7 +593,7 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
 
     // Create new filename
     char text_filename[255];
-    snprintf(text_filename, 255, "%s_ZMAX_%d_NUMHARM_%d_TURBO_%d.pulscand", base_name, zmax, max_harmonics,turbomode);
+    snprintf(text_filename, 255, "%s_ZMAX_%d_NUMHARM_%d_GPU.pulscand", base_name, zmax, max_harmonics);
     
     // open the file for writing.
     FILE *text_candidates_file = fopen(text_filename, "a");
@@ -830,7 +830,7 @@ int main(int argc, char *argv[]) {
     printf("%s\n", pulscan_frame);
 
     if (argc < 2) {
-        printf("USAGE: %s file [-ncpus int] [-zmax int] [-numharm int] [-tobs float] [-sigma float] [-zstep int] [-chunkwidth int] [-turbomode int]\n", argv[0]);
+        printf("USAGE: %s file [-ncpus int] [-zmax int] [-numharm int] [-tobs float] [-sigma float] [-zstep int] [-chunkwidth int]\n", argv[0]);
         printf("Required arguments:\n");
         printf("\tfile [string]\t\tThe input file path (.fft file format such as the output of realfft)\n");
         printf("Optional arguments:\n");
@@ -841,21 +841,7 @@ int main(int argc, char *argv[]) {
         printf("\t-sigma [float]\t\tThe sigma threshold (default = 2.0), candidates with sigma below this value will not be written to the output file\n");
         printf("\t-zstep [int]\t\tThe step size in z (default = 2).\n");
         printf("\t-chunkwidth [int]\tThe chunk width (units are r-bins, default = 32768), you will get up to ( rmax * zmax ) / ( chunkwidth * zstep ) candidates\n");
-        printf("\t-turbo [int]\t\t" BOLD ITALIC RED "T" GREEN "U" YELLOW "R" BLUE "B" MAGENTA "O" RESET " mode - increase speed by trading off candidate localisation accuracy (default off = 0, options are 0, 1, 2, 3)\n");
-        printf("\t\t\t\t  -turbo 0: Localise candidates to their exact (r,z) bin location (default setting)\n");
-        printf("\t\t\t\t  -turbo 1: Only localise candidates to their chunk of the frequency spectrum. This will only give the r-bin to within -chunkwidth accuracy\n");
-        printf("\t\t\t\t  -turbo 2: Option 1 and fix -zstep at 2. Automatically enabled if -turbo 1 and -zstep left as default. THIS WILL OVERRIDE THE -zstep FLAG.\n");
-        printf("\t\t\t\t  -turbo 3: Use logarithmically-spaced zsteps (1,2,4,8,...). THIS WILL OVERRIDE THE -zstep FLAG. \n\n");
         return 1;
-    }
-
-    // Get the turbo mode flag from the command line arguments
-    // If not provided, default to 0
-    int turbomode = 0;
-    for (int i = 1; i < argc; ++i) {
-        if (strcmp(argv[i], "-turbo") == 0 && i+1 < argc) {
-            turbomode = atoi(argv[i+1]);
-        }
     }
 
     // Get the number of OpenMP threads from the command line arguments
@@ -926,11 +912,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    if ((turbomode == 1) && (z_step == 2)){
-        turbomode = 2;
-        printf(GREEN "Automatically enabled turbo mode 2 as turbo mode = 1 and zstep = 2\n\n" RESET);
-    }
-
     omp_set_num_threads(ncpus);
 
     int magnitude_array_size;
@@ -948,7 +929,7 @@ int main(int argc, char *argv[]) {
 
     // Create new filename
     char text_filename[255];
-    snprintf(text_filename, 255, "%s_ZMAX_%d_NUMHARM_%d_TURBO_%d.pulscand", base_name, zmax, nharmonics, turbomode);
+    snprintf(text_filename, 255, "%s_ZMAX_%d_NUMHARM_%d_GPU.pulscand", base_name, zmax, nharmonics);
 
     FILE *text_candidates_file = fopen(text_filename, "w"); // open the file for writing. Make sure you have write access in this directory.
     if (text_candidates_file == NULL) {
@@ -978,7 +959,6 @@ int main(int argc, char *argv[]) {
             chunkwidth,
             ncpus,
             harmonic,
-            turbomode,
             nharmonics,
             global_candidates_array,
             &global_candidates_array_index);
