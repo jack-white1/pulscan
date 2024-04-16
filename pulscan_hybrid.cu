@@ -154,7 +154,7 @@ double chi2_logp(double chi2, double dof)
     //printf("chi2/dof = %f\n", chi2/dof);
     // COMMENT OUT NEXT LINE IS THE MODIFICATION
     //if (chi2 / dof > 15.0 || (dof > 150 && chi2 / dof > 6.0)) {
-    if (chi2 / dof > 1.0) {
+    if (chi2 / dof > 1.5) {
         //printf("chi2/dof > 1.0\n");
         // printf("Using asymtotic expansion...\n");
         // Use some asymtotic expansions for the chi^2 distribution
@@ -236,6 +236,7 @@ double candidate_sigma(double power, int numsum, double numtrials)
     // Get the natural log probability
     chi2 = 2.0 * power;
     dof = 2.0 * numsum;
+    //printf("chi2 = %f, dof = %f\n", chi2, dof);
     logp = chi2_logp(chi2, dof);
 
     // Correct for numtrials
@@ -720,13 +721,28 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
 
     size_t shared_memory_size = lookupArraySize + sumArraySize + searchReduceArraySize;
 
-    printf("shared_memory_size = %ld\n", shared_memory_size);
+    printf("Required GPU smem          %ld bytes\n", shared_memory_size);
+
+    // Check the current device properties
+    int deviceId;
+    cudaGetDevice(&deviceId);
+    cudaDeviceProp props;
+    cudaGetDeviceProperties(&props, deviceId);
+
+    printf("Available GPU smem          %ld bytes\n", props.sharedMemPerBlock);
+
+    if (shared_memory_size > props.sharedMemPerBlock){
+        printf("ERROR: Shared memory required for kernel exceeds device limit, reduce -chunkwidth or -zmax\n");
+        exit(EXIT_FAILURE);
+        return;
+    }
+
 
 
 
 
     // print all arguments before calling kernel
-    printf("numBlocks = %d, numThreadsPerBlock = %d, shared_memory_size = %ld\n", numBlocks, numThreadsPerBlock, shared_memory_size);
+    //printf("numBlocks = %d, numThreadsPerBlock = %d, shared_memory_size = %ld\n", numBlocks, numThreadsPerBlock, shared_memory_size);
     boxcarFilterKernel<<<numBlocks, numThreadsPerBlock, shared_memory_size>>>(device_magnitudes_array, device_candidates, chunkwidth, zmax, z_step, nharmonics);
     // get last cuda error
     cudaError_t cudaError = cudaGetLastError();
@@ -741,19 +757,13 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
     candidate_struct_short* hostCopyCandidates;
     hostCopyCandidates = (candidate_struct_short*) malloc(sizeof(candidate_struct_short) * num_chunks * num_candidates_per_chunk);
     cudaMemcpy(hostCopyCandidates, device_candidates, sizeof(candidate_struct_short) * num_chunks * num_candidates_per_chunk, cudaMemcpyDeviceToHost);
-    printf("num_chunks * num_candidates_per_chunk = %d\n", num_chunks * num_candidates_per_chunk);
-    //for (int i = 0; i < num_chunks * num_candidates_per_chunk; i++){
-    //    printf("i: %d, power: %f, index: %d, z: %d, harmonic: %d\n", i, hostCopyCandidates[i].power, hostCopyCandidates[i].index, hostCopyCandidates[i].z, hostCopyCandidates[i].harmonic);
-    //}
+
 
     // end timer for boxcar filtering
-
-
-
     double end = omp_get_wtime();
 
     double time_spent = end - start;
-    printf("Searching the data took    %f seconds using %d thread(s)\n", time_spent, ncpus);
+    printf("Searching the data took    %f seconds using %s\n", time_spent, props.name);
 
     start = omp_get_wtime();
     int degrees_of_freedom = 1;
@@ -767,23 +777,33 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
         degrees_of_freedom  = 10;
     }
 
-    double tempsigma;
+    double* sigma_array;
+    sigma_array = (double*) malloc(sizeof(double) * num_chunks * num_candidates_per_chunk);
+
     for (int i = 0; i < num_chunks * num_candidates_per_chunk; i++){
-        tempsigma = candidate_sigma(hostCopyCandidates[i].power*0.5, (hostCopyCandidates[i].z+1)*degrees_of_freedom, num_independent_trials);
-        if (tempsigma > sigma_threshold){
+        sigma_array[i] = candidate_sigma(hostCopyCandidates[i].power*0.5, (hostCopyCandidates[i].z+1)*degrees_of_freedom, num_independent_trials);
+    }
+    
+    end = omp_get_wtime();
+    time_spent = end - start;
+    printf("Candidate sigma took       %f seconds using %d thread(s)\n", time_spent, ncpus);
+    start = omp_get_wtime();
+
+    for (int i = 0; i < num_chunks * num_candidates_per_chunk; i++){
+        if (sigma_array[i] > sigma_threshold){
             global_candidates[*global_candidates_array_index].power = hostCopyCandidates[i].power;
             global_candidates[*global_candidates_array_index].index = hostCopyCandidates[i].index;
             global_candidates[*global_candidates_array_index].z = hostCopyCandidates[i].z;
             global_candidates[*global_candidates_array_index].harmonic = hostCopyCandidates[i].harmonic;
-            global_candidates[*global_candidates_array_index].sigma = tempsigma;
+            global_candidates[*global_candidates_array_index].sigma = sigma_array[i];
             *global_candidates_array_index = *global_candidates_array_index + 1;
         }
     }
 
     end = omp_get_wtime();
     time_spent = end - start;
-    printf("Producing output took      %f seconds using 1 thread\n", time_spent);
-
+    printf("Applying threshold took    %f seconds using 1 thread\n", time_spent);
+    start = omp_get_wtime();
     fclose(text_candidates_file);
     free(base_name);
     free(hostCopyCandidates);
@@ -947,7 +967,7 @@ int main(int argc, char *argv[]) {
     candidate_struct *global_candidates_array = (candidate_struct*) malloc(sizeof(candidate_struct) * nharmonics * max_candidates_per_harmonic);
     int global_candidates_array_index = 0;
 
-    for (int harmonic = 1; harmonic < nharmonics+1; harmonic++){
+    for (int harmonic = 1; harmonic <= nharmonics; harmonic++){
         recursive_boxcar_filter_cache_optimised(magnitudes, 
             magnitude_array_size, 
             zmax, 
@@ -964,9 +984,18 @@ int main(int argc, char *argv[]) {
             &global_candidates_array_index);
     }
 
-    int num_candidates = global_candidates_array_index;
+    // begin timer for sorting output array
+    double start_sort = omp_get_wtime();
 
+    int num_candidates = global_candidates_array_index;
     qsort(global_candidates_array, num_candidates, sizeof(candidate_struct), compare_candidate_structs_sigma);
+    // end timer for sorting output array
+    double end_sort = omp_get_wtime();
+    double time_spent_sort = end_sort - start_sort;
+    printf("Sorting candidates took    %f seconds using 1 thread\n", time_spent_sort);
+
+    // start timer for writing final_output_candidates to text file
+    double start_write = omp_get_wtime();
 
     float temp_period_ms;
     float temp_frequency;
@@ -1012,19 +1041,25 @@ int main(int argc, char *argv[]) {
     }
 
     //printf("global_candidates_array_index = %d\n", global_candidates_array_index);
-    for (int i = 0; i < global_candidates_array_index; i++){
+    /*for (int i = 0; i < global_candidates_array_index; i++){
         if (global_candidates_array[i].sigma > sigma_threshold){
             //printf("sigma = %f, harmonic = %d\n", global_candidates_array[i].sigma, global_candidates_array[i].harmonic);
         }
-    }
+    }*/
     fclose(text_candidates_file);
+
+    // end timer for writing final_output_candidates to text file
+    double end_write = omp_get_wtime();
+    double time_spent_write = end_write - start_write;
+    printf("Writing the output took    %f seconds using 1 thread\n", time_spent_write);
+
 
     free(magnitudes);
 
     // end overall program timer
     double end_program = omp_get_wtime();
     double time_spent_program = end_program - start_program;
-    printf("--------------------------------------------\nTotal time spent was       " GREEN "%f seconds" RESET "\n\n\n", time_spent_program);
+    printf("--------------------------------------------\nTotal time spent was       " GREEN "%f seconds" RESET " (excluding GPU initialisation)\n\n\n", time_spent_program);
 
     printf("Output written to %s\n", text_filename);
 

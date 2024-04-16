@@ -12,11 +12,11 @@
 
 # Pulscan
 
-Pulscan is a high-performance pulsar searching tool that can run on GPUs, CPUs and hybrid systems such as NVIDIA Grace Hopper. Pulscan performs an acceleration search for the signature of binary pulsars using boxcar filters on FFT spectra. 
+Pulscan is a high-performance pulsar searching tool that can run on GPUs, CPUs and hybrid CPU/GPU systems such as NVIDIA Grace Hopper, making use of both CPU and GPU resources for different sections of the pipeline. Pulscan performs an acceleration search for the signature of binary pulsars using boxcar filters on FFT magnitude spectra. 
 
 The input data is expected to be in .fft format, which can be produced using PRESTO's `realfft` program.
 
-A .fft file is a binary file consisting of an even number of FP32 floats, where each pair represents the real and complex component of a single bin of an FFT spectrum. The first pair of floats represents the DC, or zero frequency component of the signal. The final pair of numbers should be the frequency component corresponding to sampling_frequency/2.
+An .fft file is a binary file consisting of an even number of FP32 floats, where each pair represents the real and complex component of a single bin of an FFT spectrum. The first pair of floats represents the DC, or zero frequency component of the signal. The final pair of numbers should be the frequency component corresponding to sampling_frequency/2.
 
 ## Prerequisites
 

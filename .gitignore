@@ -6,3 +6,4 @@ pulscan_gpu
 .vscode
 *.pulscand
 *.gpucand
+backups/*
