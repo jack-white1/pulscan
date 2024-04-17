@@ -580,7 +580,8 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
                                 int zmax, const char *filename, 
                                 float observation_time_seconds, float sigma_threshold, int z_step, \
                                 int chunkwidth, int ncpus, int nharmonics, int max_harmonics,
-                                candidate_struct* global_candidates, int* global_candidates_array_index) {
+                                candidate_struct* global_candidates, int* global_candidates_array_index, \
+                                int threads_per_block) {
 
     // make a copy of the input magnitudes array
     float* magnitudes_array = (float*)malloc(sizeof(float) * magnitudes_array_length);
@@ -712,7 +713,7 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
     candidate_struct_short* device_candidates;
     cudaMalloc(&device_candidates, sizeof(candidate_struct_short) * num_chunks * num_candidates_per_chunk);
 
-    int numThreadsPerBlock = 256;
+    int numThreadsPerBlock = threads_per_block;
     int numBlocks = num_chunks;
 
     size_t lookupArraySize = (chunkwidth + zmax) * sizeof(float);
@@ -786,7 +787,7 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
     
     end = omp_get_wtime();
     time_spent = end - start;
-    printf("Candidate sigma took       %f seconds using %d thread(s)\n", time_spent, ncpus);
+    printf("Candidate sigma took       %f seconds using 1 thread\n", time_spent);
     start = omp_get_wtime();
 
     for (int i = 0; i < num_chunks * num_candidates_per_chunk; i++){
@@ -841,6 +842,7 @@ int main(int argc, char *argv[]) {
         printf("\t-sigma [float]\t\tThe sigma threshold (default = 2.0), candidates with sigma below this value will not be written to the output file\n");
         printf("\t-zstep [int]\t\tThe step size in z (default = 2).\n");
         printf("\t-chunkwidth [int]\tThe chunk width (units are r-bins, default = 32768), you will get up to ( rmax * zmax ) / ( chunkwidth * zstep ) candidates\n");
+        printf("\t-threadsperblock [int]\tThe number of threads per block (default = 256)\n");
         return 1;
     }
 
@@ -904,11 +906,20 @@ int main(int argc, char *argv[]) {
     }
 
     // Get the chunk width from the command line arguments
-    // If not provided, default to 32768
-    int chunkwidth = 32768;
+    // If not provided, default to 4096
+    int chunkwidth = 4096;
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "-chunkwidth") == 0 && i+1 < argc) {
             chunkwidth = atoi(argv[i+1]);
+        }
+    }
+
+    // Get the number of threads per block from the command line arguments
+    // If not provided, default to 256
+    int threads_per_block = 256;
+    for (int i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "-threadsperblock") == 0 && i+1 < argc) {
+            threads_per_block = atoi(argv[i+1]);
         }
     }
 
@@ -961,7 +972,8 @@ int main(int argc, char *argv[]) {
             harmonic,
             nharmonics,
             global_candidates_array,
-            &global_candidates_array_index);
+            &global_candidates_array_index,
+            threads_per_block);
     }
 
     // begin timer for sorting output array
