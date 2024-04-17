@@ -4,8 +4,8 @@ import statistics
 import sys
 
 def run_command(command):
-    # Run the command and capture the output
-    result = subprocess.run(command, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # Run the command and capture the output using universal_newlines for compatibility with Python 3.6
+    result = subprocess.run(command, shell=True, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     return result.stdout
 
 def extract_execution_time(output):
@@ -50,7 +50,7 @@ def main():
                 results[(ncpus, zmax)] = (average_time, stdev_time)
 
     # Print results
-    print("\n\nSummary of results:")
+    print("\n\nSummary of hybrid results:")
     for (ncpus, zmax), (avg, stdev) in results.items():
         print(f"Config (ncpus={ncpus}, zmax={zmax}): Average Time = {avg:.6f} s, StdDev = {stdev:.6f} s")
 
