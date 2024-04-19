@@ -19,10 +19,10 @@ def parse_times(output):
     return total_time, search_time_sum
 
 # Constants
-ncpus_values = [1, 2, 4, 8, 16, 24]
+ncpus_values = [1, 2, 4, 8, 16]
 num_repeats = 16
 programs = ['pulscan', 'pulscan_hybrid']
-base_command = "./{} sample_data/1298us_binary.fft -zmax 1000 -numharm 4 -ncpus {}"
+base_command = "./{} sample_data/1298us_binary.fft -zmax 1000 -numharm 4 -chunkwidth 24000 -ncpus {}"
 
 # Dictionary to store results
 results = {program: {ncpus: {'total_times': [], 'search_sums': []} for ncpus in ncpus_values} for program in programs}
@@ -32,6 +32,9 @@ for program in programs:
     for ncpus in ncpus_values:
         for _ in range(num_repeats):
             command = base_command.format(program, ncpus)
+            # Append the threadsperblock flag if the program is pulscan_hybrid
+            if program == 'pulscan_hybrid':
+                command += " -threadsperblock 512"
             output = run_command(command)
             total_time, search_sum = parse_times(output)
             results[program][ncpus]['total_times'].append(total_time)
