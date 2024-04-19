@@ -34,14 +34,6 @@ git clone https://github.com/jack-white1/pulscan
 cd pulscan
 ```
 
-### For GPU Version
-
-To compile the GPU-only version of Pulscan:
-
-```bash
-nvcc pulscan_gpu.cu -o pulscan_gpu -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math
-```
-
 ### For Hybrid (CPU/GPU) Version
 
 For the hybrid version that utilizes both CPU and GPU resources:
@@ -57,6 +49,14 @@ For the hybrid version that utilizes both CPU and GPU resources:
    ```bash
    nvcc pulscan_hybrid.cu localcdflib.o -o pulscan_hybrid -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math
    ```
+
+### For GPU Version
+
+To compile the GPU-only version of Pulscan:
+
+```bash
+nvcc pulscan_gpu.cu -o pulscan_gpu -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math
+```
 
 ### For CPU Version
 
@@ -76,16 +76,16 @@ To compile the CPU version of Pulscan, follow these steps:
 
 ## Usage
 
+### Running the hybrid CPU/GPU version
+
+```bash
+./pulscan_hybrid sample_data/test_data.fft -tobs 602.112
+```
+
 ### Running the GPU version
 
 ```bash
 ./pulscan_gpu sample_data/test_data.fft
-```
-
-### Running the hybrid CPU/GPU version
-
-```bash
-./pulscan_hybrid sample_data/test_data.fft
 ```
 
 ### Running the CPU version
@@ -93,3 +93,13 @@ To compile the CPU version of Pulscan, follow these steps:
 ```bash
 ./pulscan sample_data/test_data.fft -tobs 602.112
 ```
+
+### Getting help
+
+Run the following to get a list and explanation of available options:
+
+```bash
+./pulscan
+```
+
+If you have any other questions: jack.white at eng.ox.ac.uk
