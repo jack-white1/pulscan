@@ -724,23 +724,21 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
 
     printf("Required GPU smem          %ld bytes\n", shared_memory_size);
 
+    cudaFuncSetAttribute(boxcarFilterKernel, cudaFuncAttributeMaxDynamicSharedMemorySize, shared_memory_size);
+
+    // check it worked by getting last cuda error
+    cudaError_t smemError = cudaGetLastError();
+    if (smemError != cudaSuccess) {
+        printf("CUDA error at smem request (probably requested too much shared memory, reduce zmax or chunkwidth): %s\n", cudaGetErrorString(smemError));
+        // exit the program
+        exit(1);
+    }
+
     // Check the current device properties
     int deviceId;
     cudaGetDevice(&deviceId);
     cudaDeviceProp props;
     cudaGetDeviceProperties(&props, deviceId);
-
-    printf("Available GPU smem          %ld bytes\n", props.sharedMemPerBlock);
-
-    if (shared_memory_size > props.sharedMemPerBlock){
-        printf("ERROR: Shared memory required for kernel exceeds device limit, reduce -chunkwidth or -zmax\n");
-        exit(EXIT_FAILURE);
-        return;
-    }
-
-
-
-
 
     // print all arguments before calling kernel
     //printf("numBlocks = %d, numThreadsPerBlock = %d, shared_memory_size = %ld\n", numBlocks, numThreadsPerBlock, shared_memory_size);
