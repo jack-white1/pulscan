@@ -13,6 +13,19 @@ struct candidate{
     int numharm;
 };
 
+// comparison function for qsort
+int compareCandidatesByLogp(const void* a, const void* b){
+    candidate* candidateA = (candidate*)a;
+    candidate* candidateB = (candidate*)b;
+    if (candidateA->logp > candidateB->logp){
+        return 1;
+    } else if (candidateA->logp < candidateB->logp){
+        return -1;
+    } else {
+        return 0;
+    }
+}
+
 double __device__ power_to_logp(float chi2, float dof){
     double double_dof = (double) dof;
     double double_chi2 = (double) chi2;
@@ -416,11 +429,11 @@ __global__ void decimateHarmonics(float* magnitudeSquaredArray, float* decimated
 }
 
 // logarithmic zstep, zmax = 256, numThreads = 256
-__global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globalCandidateArray, int numharm, long numFloats){
+__global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globalCandidateArray, int numharm, long numFloats, int numCandidatesPerBlock){
     __shared__ float lookupArray[512];
     __shared__ float sumArray[256];
     __shared__ float searchArray[256];
-    __shared__ candidate localCandidateArray[16];
+    __shared__ candidate localCandidateArray[16]; //oversized, has to be greater than numCandidatesPerBlock
 
     int globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
     int localThreadIndex = threadIdx.x;
@@ -431,44 +444,50 @@ __global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globa
     __syncthreads();
 
     // initialise the sum array
-    sumArray[localThreadIndex] = lookupArray[localThreadIndex];
+    sumArray[localThreadIndex] = 0.0f;
     __syncthreads();
     // begin boxcar filtering
-    int targetZ = 1;
+    int targetZ = 0;
     int outputCounter = 0;
 
-    for (int z = 0; z < 256; z+=1){
+    for (int z = 0; z <= 256; z+=1){
         sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + z];
-        if (z = targetZ){
+        if (z == targetZ){
             searchArray[localThreadIndex] = sumArray[localThreadIndex];
-            for (int stride = blockDim.x / 2; stride>0; stride >>= 1){
+            for (int stride = blockDim.x / 2; stride>0; stride /= 2){
                 if (localThreadIndex < stride){
                     searchArray[localThreadIndex] = fmaxf(searchArray[localThreadIndex], searchArray[localThreadIndex + stride]);
                 }
                 __syncthreads();
             }
-            localCandidateArray[outputCounter].power = searchArray[0];
-            localCandidateArray[outputCounter].r = blockIdx.x*blockDim.x;
-            localCandidateArray[outputCounter].z = z;
-            localCandidateArray[outputCounter].logp = 0.0f;
-            localCandidateArray[outputCounter].numharm = numharm;
+            if (localThreadIndex == 0){
+                localCandidateArray[outputCounter].power = searchArray[0];
+                localCandidateArray[outputCounter].r = (int) blockIdx.x*blockDim.x;
+                localCandidateArray[outputCounter].z = z;
+                localCandidateArray[outputCounter].logp = 0.0f;
+                localCandidateArray[outputCounter].numharm = numharm;
+            }
             outputCounter+=1;
-            targetZ *= 2;
+            if (targetZ == 0){
+                targetZ = 1;
+            } else {
+                targetZ *= 2;
+            }
         }
         __syncthreads();
     }
 
     __syncthreads();
 
-    if (localThreadIndex < 16){
-        globalCandidateArray[blockIdx.x*16+localThreadIndex] = localCandidateArray[localThreadIndex];
+    if (localThreadIndex < numCandidatesPerBlock){
+        globalCandidateArray[blockIdx.x*numCandidatesPerBlock+localThreadIndex] = localCandidateArray[localThreadIndex];
     }
 }
 
 __global__ void calculateLogp(candidate* globalCandidateArray, long numCandidates, int numSum){
     int globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
     if (globalThreadIndex < numCandidates){
-        double logp = power_to_logp(globalCandidateArray[globalThreadIndex].power,globalCandidateArray[globalThreadIndex].z*numSum);
+        double logp = power_to_logp(globalCandidateArray[globalThreadIndex].power,globalCandidateArray[globalThreadIndex].z*numSum*2);
         globalCandidateArray[globalThreadIndex].logp = (float) logp;
     }
 }
@@ -493,6 +512,16 @@ void copyDeviceArrayToHostAndSaveToFile(float* deviceArray, long numFloats, cons
         fprintf(f, "%f\n", hostArray[i]);
     }
     fclose(f);
+    free(hostArray);
+}
+
+void copyDeviceCandidateArrayToHostAndPrint(candidate* deviceArray, long numCandidates){
+    candidate* hostArray;
+    hostArray = (candidate*)malloc(sizeof(candidate)*numCandidates);
+    cudaMemcpy(hostArray, deviceArray, sizeof(candidate)*numCandidates,cudaMemcpyDeviceToHost);
+    for (int i = 0; i < numCandidates; i++){
+        printf("Candidate %d: power: %f, logp: %f, r: %d, z: %d, numharm: %d\n", i, hostArray[i].power, hostArray[i].logp, hostArray[i].r, hostArray[i].z, hostArray[i].numharm);
+    }
     free(hostArray);
 }
 
@@ -659,7 +688,7 @@ int main(int argc, char* argv[]){
     cudaDeviceSynchronize();
     
     //copyDeviceArrayToHostAndPrint(magnitudeSquaredArray, numMagnitudes);
-    //copyDeviceArrayToHostAndSaveToFile(magnitudeSquaredArray, numMagnitudes, "magnitudeSquaredArray.bin");
+    //copyDeviceArrayToHostAndSaveToFile(magnitudeSquaredArray, numMagnitudes, "magnitudeSquaredArray.csv");
 
     // stop timing
     cudaEventRecord(stop);
@@ -689,6 +718,8 @@ int main(int argc, char* argv[]){
     }
     decimateHarmonics<<<numBlocksDecimate, numThreadsDecimate>>>(magnitudeSquaredArray, decimatedArrayBy2, decimatedArrayBy3, decimatedArrayBy4, numMagnitudes);
     cudaDeviceSynchronize();
+
+    //copyDeviceArrayToHostAndSaveToFile(decimatedArrayBy4, numMagnitudes/4, "decimatedArrayBy4.csv");
     
     // stop timing
     cudaEventRecord(stop);
@@ -713,10 +744,17 @@ int main(int argc, char* argv[]){
     candidate* globalCandidateArray3;
     candidate* globalCandidateArray4;
 
-    cudaMalloc((void**)&globalCandidateArray1, sizeof(candidate)*16*numBlocksBoxcar1);
-    cudaMalloc((void**)&globalCandidateArray2, sizeof(candidate)*16*numBlocksBoxcar2);
-    cudaMalloc((void**)&globalCandidateArray3, sizeof(candidate)*16*numBlocksBoxcar3);
-    cudaMalloc((void**)&globalCandidateArray4, sizeof(candidate)*16*numBlocksBoxcar4);
+    int numCandidatesPerBlock = 10;  // z = 0,1,2,4,8,16,32,64,128,256 = 10 candidates
+
+    cudaMalloc((void**)&globalCandidateArray1, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar1);
+    cudaMalloc((void**)&globalCandidateArray2, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar2);
+    cudaMalloc((void**)&globalCandidateArray3, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar3);
+    cudaMalloc((void**)&globalCandidateArray4, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar4);
+
+    cudaMemset(globalCandidateArray1, 0, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar1);
+    cudaMemset(globalCandidateArray2, 0, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar2);
+    cudaMemset(globalCandidateArray3, 0, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar3);
+    cudaMemset(globalCandidateArray4, 0, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar4);
 
     
     if (debug == 1) {
@@ -725,11 +763,13 @@ int main(int argc, char* argv[]){
         printf("Calling boxcarFilterArray with %d blocks and %d threads per block\n", numBlocksBoxcar3, numThreadsBoxcar);
         printf("Calling boxcarFilterArray with %d blocks and %d threads per block\n", numBlocksBoxcar4, numThreadsBoxcar);
     }
-    boxcarFilterArray<<<numBlocksBoxcar1, numThreadsBoxcar>>>(magnitudeSquaredArray, globalCandidateArray1, 1, numMagnitudes);
-    boxcarFilterArray<<<numBlocksBoxcar2, numThreadsBoxcar>>>(decimatedArrayBy2, globalCandidateArray2, 2, numMagnitudes/2);
-    boxcarFilterArray<<<numBlocksBoxcar3, numThreadsBoxcar>>>(decimatedArrayBy3, globalCandidateArray3, 3, numMagnitudes/3);
-    boxcarFilterArray<<<numBlocksBoxcar4, numThreadsBoxcar>>>(decimatedArrayBy4, globalCandidateArray4, 4, numMagnitudes/4);
+    boxcarFilterArray<<<numBlocksBoxcar1, numThreadsBoxcar>>>(magnitudeSquaredArray, globalCandidateArray1, 1, numMagnitudes, numCandidatesPerBlock);
+    boxcarFilterArray<<<numBlocksBoxcar2, numThreadsBoxcar>>>(decimatedArrayBy2, globalCandidateArray2, 2, numMagnitudes/2, numCandidatesPerBlock);
+    boxcarFilterArray<<<numBlocksBoxcar3, numThreadsBoxcar>>>(decimatedArrayBy3, globalCandidateArray3, 3, numMagnitudes/3, numCandidatesPerBlock);
+    boxcarFilterArray<<<numBlocksBoxcar4, numThreadsBoxcar>>>(decimatedArrayBy4, globalCandidateArray4, 4, numMagnitudes/4, numCandidatesPerBlock);
     cudaDeviceSynchronize();
+
+    //copyDeviceCandidateArrayToHostAndPrint(globalCandidateArray4,numCandidatesPerBlock*numBlocksBoxcar4);
 
     // stop timing
     cudaEventRecord(stop);
@@ -744,10 +784,10 @@ int main(int argc, char* argv[]){
     cudaEventRecord(start);
 
     int numThreadsLogp = 256;
-    int numBlocksLogp1 = (numBlocksBoxcar1*16 + numThreadsLogp - 1)/ numThreadsLogp;
-    int numBlocksLogp2 = (numBlocksBoxcar2*16 + numThreadsLogp - 1)/ numThreadsLogp;
-    int numBlocksLogp3 = (numBlocksBoxcar3*16 + numThreadsLogp - 1)/ numThreadsLogp;
-    int numBlocksLogp4 = (numBlocksBoxcar4*16 + numThreadsLogp - 1)/ numThreadsLogp;
+    int numBlocksLogp1 = (numBlocksBoxcar1*numCandidatesPerBlock + numThreadsLogp - 1)/ numThreadsLogp;
+    int numBlocksLogp2 = (numBlocksBoxcar2*numCandidatesPerBlock + numThreadsLogp - 1)/ numThreadsLogp;
+    int numBlocksLogp3 = (numBlocksBoxcar3*numCandidatesPerBlock + numThreadsLogp - 1)/ numThreadsLogp;
+    int numBlocksLogp4 = (numBlocksBoxcar4*numCandidatesPerBlock + numThreadsLogp - 1)/ numThreadsLogp;
 
     if (debug == 1) {
         printf("Calling calculateLogp with %d blocks and %d threads per block\n", numBlocksLogp1, numThreadsLogp);
@@ -755,12 +795,14 @@ int main(int argc, char* argv[]){
         printf("Calling calculateLogp with %d blocks and %d threads per block\n", numBlocksLogp3, numThreadsLogp);
         printf("Calling calculateLogp with %d blocks and %d threads per block\n", numBlocksLogp4, numThreadsLogp);
     }
-    calculateLogp<<<numBlocksLogp1, numThreadsLogp>>>(globalCandidateArray1, numBlocksBoxcar1*16, 1);
-    calculateLogp<<<numBlocksLogp2, numThreadsLogp>>>(globalCandidateArray2, numBlocksBoxcar2*16, 3);
-    calculateLogp<<<numBlocksLogp3, numThreadsLogp>>>(globalCandidateArray3, numBlocksBoxcar3*16, 6);
-    calculateLogp<<<numBlocksLogp4, numThreadsLogp>>>(globalCandidateArray4, numBlocksBoxcar4*16, 10);
+    calculateLogp<<<numBlocksLogp1, numThreadsLogp>>>(globalCandidateArray1, numBlocksBoxcar1*numCandidatesPerBlock, 1);
+    calculateLogp<<<numBlocksLogp2, numThreadsLogp>>>(globalCandidateArray2, numBlocksBoxcar2*numCandidatesPerBlock, 3);
+    calculateLogp<<<numBlocksLogp3, numThreadsLogp>>>(globalCandidateArray3, numBlocksBoxcar3*numCandidatesPerBlock, 6);
+    calculateLogp<<<numBlocksLogp4, numThreadsLogp>>>(globalCandidateArray4, numBlocksBoxcar4*numCandidatesPerBlock, 10);
     cudaDeviceSynchronize();
 
+    //copyDeviceCandidateArrayToHostAndPrint(globalCandidateArray1, numCandidatesPerBlock*numBlocksBoxcar1);
+    
     // stop timing
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
@@ -776,15 +818,15 @@ int main(int argc, char* argv[]){
     candidate* hostCandidateArray3;
     candidate* hostCandidateArray4;
 
-    hostCandidateArray1 = (candidate*)malloc(sizeof(candidate)*16*numBlocksBoxcar1);
-    hostCandidateArray2 = (candidate*)malloc(sizeof(candidate)*16*numBlocksBoxcar2);
-    hostCandidateArray3 = (candidate*)malloc(sizeof(candidate)*16*numBlocksBoxcar3);
-    hostCandidateArray4 = (candidate*)malloc(sizeof(candidate)*16*numBlocksBoxcar4);
+    hostCandidateArray1 = (candidate*)malloc(sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar1);
+    hostCandidateArray2 = (candidate*)malloc(sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar2);
+    hostCandidateArray3 = (candidate*)malloc(sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar3);
+    hostCandidateArray4 = (candidate*)malloc(sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar4);
 
-    cudaMemcpy(hostCandidateArray1, globalCandidateArray1, sizeof(candidate)*16*numBlocksBoxcar1, cudaMemcpyDeviceToHost);
-    cudaMemcpy(hostCandidateArray2, globalCandidateArray2, sizeof(candidate)*16*numBlocksBoxcar2, cudaMemcpyDeviceToHost);
-    cudaMemcpy(hostCandidateArray3, globalCandidateArray3, sizeof(candidate)*16*numBlocksBoxcar3, cudaMemcpyDeviceToHost);
-    cudaMemcpy(hostCandidateArray4, globalCandidateArray4, sizeof(candidate)*16*numBlocksBoxcar4, cudaMemcpyDeviceToHost);
+    cudaMemcpy(hostCandidateArray1, globalCandidateArray1, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar1, cudaMemcpyDeviceToHost);
+    cudaMemcpy(hostCandidateArray2, globalCandidateArray2, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar2, cudaMemcpyDeviceToHost);
+    cudaMemcpy(hostCandidateArray3, globalCandidateArray3, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar3, cudaMemcpyDeviceToHost);
+    cudaMemcpy(hostCandidateArray4, globalCandidateArray4, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar4, cudaMemcpyDeviceToHost);
 
     // output filename is inputfilename with the .fft stripped and replaced with .gpupulscand
     char outputFilename[256];
@@ -796,49 +838,68 @@ int main(int argc, char* argv[]){
     // write the candidates to a csv file with a header line
     //FILE *csvFile = fopen("gpucandidates.csv", "w");
     FILE *csvFile = fopen(outputFilename, "w");
-    fprintf(csvFile, "r,z,power,logp,numharm\n");
+    fprintf(csvFile, "logp,r,z,power,numharm\n");
 
-    float logpThreshold = -50;
+    float logpThreshold = -25;
 
-    for (int i = 0; i < numBlocksBoxcar1*16; i++){
-        if (i % 16 < 9){
-            if (hostCandidateArray1[i].logp < logpThreshold){
-                if (hostCandidateArray1[i].r != 0){
-                    fprintf(csvFile, "%d,%d,%f,%f,%d\n", hostCandidateArray1[i].r, hostCandidateArray1[i].z, hostCandidateArray1[i].power, hostCandidateArray1[i].logp, hostCandidateArray1[i].numharm);
+
+
+    candidate* finalCandidateArray = (candidate*)malloc(sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar1+numCandidatesPerBlock*numBlocksBoxcar2+numCandidatesPerBlock*numBlocksBoxcar3+numCandidatesPerBlock*numBlocksBoxcar4);
+    int candidateCounter = 0;
+
+    for (int i = 0; i < numBlocksBoxcar1*numCandidatesPerBlock; i++){
+        if (hostCandidateArray1[i].logp < logpThreshold){
+            if (hostCandidateArray1[i].r != 0){
+                if (hostCandidateArray1[i].z != 0){
+                    finalCandidateArray[candidateCounter] = hostCandidateArray1[i];
+                    candidateCounter+=1;
                 }
             }
         }
     }
     
-    for (int i = 0; i < numBlocksBoxcar2*16; i++){
-        if (i % 16 < 9){
-            if (hostCandidateArray2[i].logp < logpThreshold){
-                if (hostCandidateArray1[i].r != 0){
-                    fprintf(csvFile, "%d,%d,%f,%f,%d\n", hostCandidateArray2[i].r, hostCandidateArray2[i].z, hostCandidateArray2[i].power, hostCandidateArray2[i].logp, hostCandidateArray2[i].numharm);
+    for (int i = 0; i < numBlocksBoxcar2*numCandidatesPerBlock; i++){
+        if (hostCandidateArray2[i].logp < logpThreshold){
+            if (hostCandidateArray2[i].r != 0){
+                if (hostCandidateArray2[i].z != 0){
+                    finalCandidateArray[candidateCounter] = hostCandidateArray2[i];
+                    candidateCounter+=1;
                 }
             }
         }
     }
 
-    for (int i = 0; i < numBlocksBoxcar3*16; i++){
-        if (i % 16 < 9){
-            if (hostCandidateArray3[i].logp < logpThreshold){
-                if (hostCandidateArray1[i].r != 0){
-                    fprintf(csvFile, "%d,%d,%f,%f,%d\n", hostCandidateArray3[i].r, hostCandidateArray3[i].z, hostCandidateArray3[i].power, hostCandidateArray3[i].logp, hostCandidateArray3[i].numharm);
+    for (int i = 0; i < numBlocksBoxcar3*numCandidatesPerBlock; i++){
+        if (hostCandidateArray3[i].logp < logpThreshold){
+            if (hostCandidateArray3[i].r != 0){
+                if (hostCandidateArray3[i].z != 0){
+                    finalCandidateArray[candidateCounter] = hostCandidateArray3[i];
+                    candidateCounter+=1;
                 }
             }
         }
     }
 
-    for (int i = 0; i < numBlocksBoxcar4*16; i++){
-        if (i % 16 < 9){
-            if (hostCandidateArray4[i].logp < logpThreshold){
-                if (hostCandidateArray1[i].r != 0){
-                    fprintf(csvFile, "%d,%d,%f,%f,%d\n", hostCandidateArray4[i].r, hostCandidateArray4[i].z, hostCandidateArray4[i].power, hostCandidateArray4[i].logp, hostCandidateArray4[i].numharm);
+    
+    for (int i = 0; i < numBlocksBoxcar4*numCandidatesPerBlock; i++){
+        if (hostCandidateArray4[i].logp < logpThreshold){
+            if (hostCandidateArray4[i].r != 0){
+                if (hostCandidateArray4[i].z != 0){
+                    finalCandidateArray[candidateCounter] = hostCandidateArray4[i];
+                    candidateCounter+=1;
                 }
             }
         }
     }
+    
+
+    // use quicksort to sort the final candidate array by logp (ascending order)
+    qsort(finalCandidateArray, candidateCounter, sizeof(candidate), compareCandidatesByLogp);
+
+    for (int i = 0; i < candidateCounter; i++){
+        fprintf(csvFile, "%f,%d,%d,%f,%d\n", finalCandidateArray[i].logp, finalCandidateArray[i].r, finalCandidateArray[i].z, finalCandidateArray[i].power, finalCandidateArray[i].numharm);
+    }
+
 
     fclose(csvFile);
 

@@ -946,8 +946,8 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    fprintf(text_candidates_file, "%10s %10s %10s %14s %10s %14s %10s %14s %14s %10s\n", 
-        "sigma", "power", "period_ms", "frequency_hz", "rbin", "f-dot", "z", "acceleration", "logp", "harmonic");
+    fprintf(text_candidates_file, "%10s %10s %10s %14s %10s %14s %10s %14s %10s\n", 
+        "sigma", "power", "period_ms", "frequency_hz", "rbin", "f-dot", "z", "acceleration", "harmonic");
     
     
 
@@ -991,7 +991,6 @@ int main(int argc, char *argv[]) {
     float temp_frequency;
     float temp_fdot;
     float temp_acceleration;
-    float temp_logp;
 
     // write final_output_candidates to text file with physical measurements
     for (int i = 0; i < num_candidates; i++){
@@ -1001,21 +1000,7 @@ int main(int argc, char *argv[]) {
                 temp_frequency = frequency_from_observation_time_seconds(observation_time_seconds,global_candidates_array[i].index);
                 temp_fdot = fdot_from_boxcar_width(global_candidates_array[i].z, observation_time_seconds);
                 temp_acceleration = acceleration_from_fdot(fdot_from_boxcar_width(global_candidates_array[i].z, observation_time_seconds), frequency_from_observation_time_seconds(observation_time_seconds,global_candidates_array[i].index));
-                int degrees_of_freedom = 1;
-                if (global_candidates_array[i].harmonic == 1){
-                    degrees_of_freedom  = 1;
-                } else if (global_candidates_array[i].harmonic == 2){
-                    degrees_of_freedom  = 3;
-                } else if (global_candidates_array[i].harmonic == 3){
-                    degrees_of_freedom  = 6;
-                } else if (global_candidates_array[i].harmonic == 4){
-                    degrees_of_freedom  = 10;
-                } else {
-                    printf("ERROR: nharmonics must be 1, 2, 3 or 4\n");
-                    return 1;
-                }
-                temp_logp = chi2_logp(global_candidates_array[i].power, degrees_of_freedom * global_candidates_array[i].z * 2);
-                fprintf(text_candidates_file, "%10.6lf %10.4f %10.6f %14.6f %10ld %14.8f %10d %14.6f %14.6f %10d\n", 
+                fprintf(text_candidates_file, "%10.6lf %10.4f %10.6f %14.6f %10ld %14.8f %10d %14.6f %10d\n", 
                     global_candidates_array[i].sigma,
                     global_candidates_array[i].power,
                     temp_period_ms,
@@ -1024,7 +1009,6 @@ int main(int argc, char *argv[]) {
                     temp_fdot,
                     global_candidates_array[i].z,
                     temp_acceleration,
-                    temp_logp,
                     global_candidates_array[i].harmonic);
             //}
         }
