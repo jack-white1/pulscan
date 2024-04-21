@@ -13,6 +13,12 @@ struct candidate{
     int numharm;
 };
 
+typedef struct {
+    float power;
+    int index;
+} power_index_struct;
+
+
 // comparison function for qsort
 int compareCandidatesByLogp(const void* a, const void* b){
     candidate* candidateA = (candidate*)a;
@@ -59,6 +65,223 @@ __global__ void separateRealAndImaginaryComponents(float2* rawDataDevice, float*
 }
 
 __global__ void medianOfMediansNormalisation(float* globalArray) {
+    // HARDCODED FOR PERFORMANCE
+    // USE medianOfMediansNormalisationAnyBlockSize() FOR GENERAL USE
+
+    // Each thread loads 4 elements from global memory to shared memory
+    // then calculates the median of these 4 elements, recursively reducing the array down to 
+    //      a single median of medians value
+    // then subtracts the median of medians from each element
+    // then takes the absolute value of each element
+    // then calculates the median of these absolute values
+    // then multiplies this new median (aka median absolute deviation) by 1.4826
+    // then subtracts the median from each original element and divides by the new median absolute deviation
+
+    // Assumes blockDim.x = 1024
+    // TODO: make this work for any blockDim.x
+    __shared__ float medianArray[4096];
+    __shared__ float madArray[4096];
+    __shared__ float normalisedArray[4096];
+
+    //int globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
+    int localThreadIndex = threadIdx.x;
+    int globalArrayIndex = blockDim.x*blockIdx.x*4+threadIdx.x;
+
+    float median;
+    float mad;
+
+    medianArray[localThreadIndex] = globalArray[globalArrayIndex];
+    medianArray[localThreadIndex + 1024] = globalArray[globalArrayIndex + 1024];
+    medianArray[localThreadIndex + 2048] = globalArray[globalArrayIndex + 2048];
+    medianArray[localThreadIndex + 3072] = globalArray[globalArrayIndex + 3072];
+
+    madArray[localThreadIndex] = medianArray[localThreadIndex];
+    madArray[localThreadIndex + 1024] = medianArray[localThreadIndex + 1024];
+    madArray[localThreadIndex + 2048] = medianArray[localThreadIndex + 2048];
+    madArray[localThreadIndex + 3072] = medianArray[localThreadIndex + 3072];
+
+    normalisedArray[localThreadIndex] = medianArray[localThreadIndex];
+    normalisedArray[localThreadIndex + 1024] = medianArray[localThreadIndex + 1024];
+    normalisedArray[localThreadIndex + 2048] = medianArray[localThreadIndex + 2048];
+    normalisedArray[localThreadIndex + 3072] = medianArray[localThreadIndex + 3072];
+
+    __syncthreads();
+
+    float a,b,c,d,min,max;
+  
+    a = medianArray[localThreadIndex];
+    b = medianArray[localThreadIndex+1024];
+    c = medianArray[localThreadIndex+2048];
+    d = medianArray[localThreadIndex+3072];
+    min = fminf(fminf(fminf(a,b),c),d);
+    max = fmaxf(fmaxf(fmaxf(a,b),c),d);
+    medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
+    __syncthreads();
+    if(localThreadIndex < 256){
+        a = medianArray[localThreadIndex];
+        b = medianArray[localThreadIndex+256];
+        c = medianArray[localThreadIndex+512];
+        d = medianArray[localThreadIndex+768];
+        min = fminf(fminf(fminf(a,b),c),d);
+        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
+        medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
+    }
+    __syncthreads();
+    if(localThreadIndex < 64){
+        a = medianArray[localThreadIndex];
+        b = medianArray[localThreadIndex+64];
+        c = medianArray[localThreadIndex+128];
+        d = medianArray[localThreadIndex+192];
+        min = fminf(fminf(fminf(a,b),c),d);
+        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
+        medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
+    }
+    __syncthreads();
+    if(localThreadIndex < 16){
+        a = medianArray[localThreadIndex];
+        b = medianArray[localThreadIndex+16];
+        c = medianArray[localThreadIndex+32];
+        d = medianArray[localThreadIndex+48];
+        min = fminf(fminf(fminf(a,b),c),d);
+        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
+        medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
+    }
+    __syncthreads();
+    if(localThreadIndex < 4){
+        a = medianArray[localThreadIndex];
+        b = medianArray[localThreadIndex+4];
+        c = medianArray[localThreadIndex+8];
+        d = medianArray[localThreadIndex+12];
+        min = fminf(fminf(fminf(a,b),c),d);
+        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
+        medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
+    }
+    __syncthreads();
+    if(localThreadIndex == 0){
+        a = medianArray[localThreadIndex];
+        b = medianArray[localThreadIndex+1];
+        c = medianArray[localThreadIndex+2];
+        d = medianArray[localThreadIndex+3];
+        min = fminf(fminf(fminf(a,b),c),d);
+        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
+        medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
+    }
+
+    __syncthreads();
+
+    median = medianArray[0];
+    __syncthreads();
+
+    //if (localThreadIndex == 0){
+    //    printf("madArray[0]: %f, medianArray[0]: %f\n", madArray[0], medianArray[0]);
+    //}
+
+    madArray[localThreadIndex] = fabsf(madArray[localThreadIndex] - median);
+    madArray[localThreadIndex + 1024] = fabsf(madArray[localThreadIndex + 1024] - median);
+    madArray[localThreadIndex + 2048] = fabsf(madArray[localThreadIndex + 2048] - median);
+    madArray[localThreadIndex + 3072] = fabsf(madArray[localThreadIndex + 3072] - median);
+
+    //if (localThreadIndex == 0){
+    //    printf("fabsf(madArray[0]): %f, medianArray[0]: %f\n", madArray[0], medianArray[0]);
+    //}
+    __syncthreads();
+
+    a = madArray[localThreadIndex];
+    b = madArray[localThreadIndex+1024];
+    c = madArray[localThreadIndex+2048];
+    d = madArray[localThreadIndex+3072];
+    min = fminf(fminf(fminf(a,b),c),d);
+    max = fmaxf(fmaxf(fmaxf(a,b),c),d);
+    madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
+    __syncthreads();
+
+    if(localThreadIndex < 512){
+        a = madArray[localThreadIndex];
+        b = madArray[localThreadIndex+512];
+        c = madArray[localThreadIndex+1024];
+        d = madArray[localThreadIndex+1536];
+        min = fminf(fminf(fminf(a,b),c),d);
+        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
+        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
+    }
+    __syncthreads();
+    if(localThreadIndex < 256){
+        a = madArray[localThreadIndex];
+        b = madArray[localThreadIndex+256];
+        c = madArray[localThreadIndex+512];
+        d = madArray[localThreadIndex+768];
+        min = fminf(fminf(fminf(a,b),c),d);
+        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
+        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
+    }
+    __syncthreads();
+    if(localThreadIndex < 64){
+        a = madArray[localThreadIndex];
+        b = madArray[localThreadIndex+64];
+        c = madArray[localThreadIndex+128];
+        d = madArray[localThreadIndex+192];
+        min = fminf(fminf(fminf(a,b),c),d);
+        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
+        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
+    }
+    __syncthreads();
+    if(localThreadIndex < 16){
+        a = madArray[localThreadIndex];
+        b = madArray[localThreadIndex+16];
+        c = madArray[localThreadIndex+32];
+        d = madArray[localThreadIndex+48];
+        min = fminf(fminf(fminf(a,b),c),d);
+        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
+        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
+    }
+    __syncthreads();
+    if(localThreadIndex < 4){
+        a = madArray[localThreadIndex];
+        b = madArray[localThreadIndex+4];
+        c = madArray[localThreadIndex+8];
+        d = madArray[localThreadIndex+12];
+        min = fminf(fminf(fminf(a,b),c),d);
+        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
+        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
+    }
+    __syncthreads();
+    if(localThreadIndex == 0){
+        a = madArray[localThreadIndex];
+        b = madArray[localThreadIndex+1];
+        c = madArray[localThreadIndex+2];
+        d = madArray[localThreadIndex+3];
+        min = fminf(fminf(fminf(a,b),c),d);
+        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
+        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5*1.4826;
+        //printf("a=%f,b=%f,c=%f,d=%f,min=%f,max=%f,1/mad=%f,mad=%.16f\n",a,b,c,d,min,max,madArray[localThreadIndex],1/madArray[localThreadIndex]);
+        
+    }
+    __syncthreads();
+    mad =  madArray[0];
+    __syncthreads();
+
+
+    normalisedArray[localThreadIndex] = (normalisedArray[localThreadIndex] - median) / mad;
+    normalisedArray[localThreadIndex + 1024] = (normalisedArray[localThreadIndex + 1024] - median) / mad;
+    normalisedArray[localThreadIndex + 2048] = (normalisedArray[localThreadIndex + 2048] - median) / mad;
+    normalisedArray[localThreadIndex + 3072] = (normalisedArray[localThreadIndex + 3072] - median) / mad;
+
+    __syncthreads();
+
+    globalArray[globalArrayIndex] = normalisedArray[localThreadIndex];
+    globalArray[globalArrayIndex + 1024] = normalisedArray[localThreadIndex + 1024];
+    globalArray[globalArrayIndex + 2048] = normalisedArray[localThreadIndex + 2048];
+    globalArray[globalArrayIndex + 3072] = normalisedArray[localThreadIndex + 3072];
+
+    //if (localThreadIndex == 0){
+    //    printf("%f,%f,%f,%f\n",globalArray[globalThreadIndex],globalArray[globalThreadIndex + 1024],globalArray[globalThreadIndex + 2048],globalArray[globalThreadIndex + 3072]);
+    //}
+
+    //if (localThreadIndex == 0){
+    //    printf("Median: %f, MAD: %f\n", median, mad);
+    //}
+}
+__global__ void medianOfMediansNormalisationOLD(float* globalArray) {
     // HARDCODED FOR PERFORMANCE
     // USE medianOfMediansNormalisationAnyBlockSize() FOR GENERAL USE
 
@@ -423,16 +646,13 @@ __global__ void decimateHarmonics(float* magnitudeSquaredArray, float* decimated
                                                 +harmonic3a+harmonic3b+harmonic3c+harmonic3d;
     }
 
-    //if (globalThreadIndex == 50000){
-    //    printf("fundamental: %f, harmonic1a: %f, harmonic1b: %f, harmonic2a: %f, harmonic2b: %f, harmonic2c: %f, harmonic3a: %f, harmonic3b: %f, harmonic3c: %f, harmonic3d: %f\n", fundamental, harmonic1a, harmonic1b, harmonic2a, harmonic2b, harmonic2c, harmonic3a, harmonic3b, harmonic3c, harmonic3d);
-    //}
 }
 
 // logarithmic zstep, zmax = 256, numThreads = 256
 __global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globalCandidateArray, int numharm, long numFloats, int numCandidatesPerBlock){
     __shared__ float lookupArray[512];
     __shared__ float sumArray[256];
-    __shared__ float searchArray[256];
+    __shared__ power_index_struct searchArray[256];
     __shared__ candidate localCandidateArray[16]; //oversized, has to be greater than numCandidatesPerBlock
 
     int globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
@@ -453,16 +673,19 @@ __global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globa
     for (int z = 0; z <= 256; z+=1){
         sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + z];
         if (z == targetZ){
-            searchArray[localThreadIndex] = sumArray[localThreadIndex];
+            searchArray[localThreadIndex].power = sumArray[localThreadIndex];
+            searchArray[localThreadIndex].index = globalThreadIndex;
             for (int stride = blockDim.x / 2; stride>0; stride /= 2){
                 if (localThreadIndex < stride){
-                    searchArray[localThreadIndex] = fmaxf(searchArray[localThreadIndex], searchArray[localThreadIndex + stride]);
+                    if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power){
+                        searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
+                    }
                 }
                 __syncthreads();
             }
             if (localThreadIndex == 0){
-                localCandidateArray[outputCounter].power = searchArray[0];
-                localCandidateArray[outputCounter].r = (int) blockIdx.x*blockDim.x;
+                localCandidateArray[outputCounter].power = searchArray[0].power;
+                localCandidateArray[outputCounter].r =searchArray[0].index;
                 localCandidateArray[outputCounter].z = z;
                 localCandidateArray[outputCounter].logp = 0.0f;
                 localCandidateArray[outputCounter].numharm = numharm;
@@ -483,6 +706,8 @@ __global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globa
         globalCandidateArray[blockIdx.x*numCandidatesPerBlock+localThreadIndex] = localCandidateArray[localThreadIndex];
     }
 }
+
+
 
 __global__ void calculateLogp(candidate* globalCandidateArray, long numCandidates, int numSum){
     int globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
@@ -744,7 +969,14 @@ int main(int argc, char* argv[]){
     candidate* globalCandidateArray3;
     candidate* globalCandidateArray4;
 
-    int numCandidatesPerBlock = 10;  // z = 0,1,2,4,8,16,32,64,128,256 = 10 candidates
+    int zmax = 256;
+    int numCandidatesPerBlock = 1;
+
+    int i = 1;
+    while (i <= zmax){
+        i *= 2;
+        numCandidatesPerBlock += 1;
+    }
 
     cudaMalloc((void**)&globalCandidateArray1, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar1);
     cudaMalloc((void**)&globalCandidateArray2, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar2);
@@ -755,7 +987,6 @@ int main(int argc, char* argv[]){
     cudaMemset(globalCandidateArray2, 0, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar2);
     cudaMemset(globalCandidateArray3, 0, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar3);
     cudaMemset(globalCandidateArray4, 0, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar4);
-
     
     if (debug == 1) {
         printf("Calling boxcarFilterArray with %d blocks and %d threads per block\n", numBlocksBoxcar1, numThreadsBoxcar);
@@ -763,6 +994,7 @@ int main(int argc, char* argv[]){
         printf("Calling boxcarFilterArray with %d blocks and %d threads per block\n", numBlocksBoxcar3, numThreadsBoxcar);
         printf("Calling boxcarFilterArray with %d blocks and %d threads per block\n", numBlocksBoxcar4, numThreadsBoxcar);
     }
+
     boxcarFilterArray<<<numBlocksBoxcar1, numThreadsBoxcar>>>(magnitudeSquaredArray, globalCandidateArray1, 1, numMagnitudes, numCandidatesPerBlock);
     boxcarFilterArray<<<numBlocksBoxcar2, numThreadsBoxcar>>>(decimatedArrayBy2, globalCandidateArray2, 2, numMagnitudes/2, numCandidatesPerBlock);
     boxcarFilterArray<<<numBlocksBoxcar3, numThreadsBoxcar>>>(decimatedArrayBy3, globalCandidateArray3, 3, numMagnitudes/3, numCandidatesPerBlock);

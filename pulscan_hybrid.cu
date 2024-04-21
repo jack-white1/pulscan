@@ -524,7 +524,7 @@ __global__ void boxcarFilterKernel(float* magnitudesArray, candidate_struct_shor
     int outputIndex = 0;
 
 
-    for (int z = 0; z < zmax; z++){
+    for (int z = 0; z <= zmax; z++){
         for (int i = 0; i < numIterationsToCoverChunk; i ++){
             localIndex = threadIdx.x + i * blockDim.x;
             if (localIndex < chunkSize){
@@ -571,9 +571,6 @@ __global__ void boxcarFilterKernel(float* magnitudesArray, candidate_struct_shor
     }
 
     __syncthreads();
-
-
-
 }
 
 void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int magnitudes_array_length, \
