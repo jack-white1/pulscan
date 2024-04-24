@@ -385,10 +385,10 @@ void normalize_chunk(float* chunk, size_t chunk_size) {
     }
 }
 
-float* compute_magnitude_chunk_normalization_mad(const char *filepath, int *magnitude_size, int ncpus, int max_boxcar_width) {
+float* compute_magnitude_chunk_normalization_mad(const char *filepath, int *magnitude_size, int ncpus, int max_boxcar_width, int normalize_chunk_size) {
     // begin timer for reading input file
     double start = omp_get_wtime();
-    size_t chunk_size = max_boxcar_width * 30; // needs to be much larger than max boxcar width
+    size_t chunk_size = normalize_chunk_size; // needs to be much larger than max boxcar width
 
     //printf("Reading file: %s\n", filepath);
 
@@ -964,6 +964,7 @@ int main(int argc, char *argv[]) {
         printf("\t-sigma [float]\t\tThe sigma threshold (default = 2.0), candidates with sigma below this value will not be written to the output file\n");
         printf("\t-zstep [int]\t\tThe step size in z (default = 2).\n");
         printf("\t-chunkwidth [int]\tThe chunk width (units are r-bins, default = 32768), you will get up to ( rmax * zmax ) / ( chunkwidth * zstep ) candidates\n");
+        printf("\t-normalizechunksize [int]\tThe size of the chunks in the normalization process (default = zmax * 30)\n");
         printf("\t-turbo [int]\t\t" BOLD ITALIC RED "T" GREEN "U" YELLOW "R" BLUE "B" MAGENTA "O" RESET " mode - increase speed by trading off candidate localisation accuracy (default off = 0, options are 0, 1, 2, 3)\n");
         printf("\t\t\t\t  -turbo 0: Localise candidates to their exact (r,z) bin location (default setting)\n");
         printf("\t\t\t\t  -turbo 1: Only localise candidates to their chunk of the frequency spectrum. This will only give the r-bin to within -chunkwidth accuracy\n");
@@ -1070,6 +1071,15 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // Get the normalize chunk size from the command line arguments
+    // If not provided, default to zmax * 30
+    int normalize_chunk_size = zmax * 30;
+    for (int i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "-normalizechunksize") == 0 && i+1 < argc) {
+            normalize_chunk_size = atoi(argv[i+1]);
+        }
+    }
+
     if ((turbomode == 1) && (z_step == 2)){
         turbomode = 2;
         printf(GREEN "Automatically enabled turbo mode 2 as turbo mode = 1 and zstep = 2\n\n" RESET);
@@ -1090,7 +1100,7 @@ int main(int argc, char *argv[]) {
     omp_set_num_threads(ncpus);
 
     int magnitude_array_size;
-    float* magnitudes = compute_magnitude_chunk_normalization_mad(argv[1], &magnitude_array_size, ncpus, zmax);
+    float* magnitudes = compute_magnitude_chunk_normalization_mad(argv[1], &magnitude_array_size, ncpus, zmax, normalize_chunk_size);
 
     if(magnitudes == NULL) {
         printf("Failed to compute magnitudes.\n");
