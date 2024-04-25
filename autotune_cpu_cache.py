@@ -2,6 +2,7 @@ import subprocess
 import re
 import csv
 import platform
+import math
 
 def get_cpu_model():
     """Return the CPU model name formatted for a filename."""
@@ -24,11 +25,13 @@ def run_pulscan(boxcar_chunk_width, normalize_chunk_width, num_cpus):
     else:
         raise ValueError("Time output not found in the response")
 
-def find_optimal_combinations(min_width, max_width, step, num_cpus):
+def find_optimal_combinations(max_width, num_cpus):
     """Find the optimal combination of boxcar chunk width and normalize chunk width."""
     times = []
-    for boxcar_chunk_width in range(min_width, max_width + 1, step):
-        for normalize_chunk_width in range(min_width, max_width + 1, step):
+    boxcar_chunk_widths = normalize_chunk_widths = [256 * (2 ** i) for i in range(int(math.log(max_width / 256, 2)) + 1)]
+    
+    for boxcar_chunk_width in boxcar_chunk_widths:
+        for normalize_chunk_width in boxcar_chunk_widths:
             run_times = []
             for i in range(16):  # Run the same configuration 16 times
                 try:
@@ -38,9 +41,9 @@ def find_optimal_combinations(min_width, max_width, step, num_cpus):
                 except ValueError as e:
                     print(f"Error: {e}")
                     run_times.append(None)
-            
+
             if all(time is not None for time in run_times):
-                average_time = sum(run_times) / len(run_times)
+                average_time = sum(filter(None, run_times)) / len(run_times)  # Only average non-None values
             else:
                 average_time = None
             times.append([boxcar_chunk_width, normalize_chunk_width] + run_times + [average_time])
@@ -62,9 +65,7 @@ def save_times_data(times, num_cpus):
 
 # Example usage
 if __name__ == "__main__":
-    min_width = 1024
-    max_width = 65536
-    step = 1024
+    max_width = 131072  # 128K
     num_cpus = 1
-    times = find_optimal_combinations(min_width, max_width, step, num_cpus)
+    times = find_optimal_combinations(max_width, num_cpus)
     save_times_data(times, num_cpus)

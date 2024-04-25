@@ -7,3 +7,4 @@ pulscan_gpu
 *.pulscand
 *.gpucand
 backups/*
+*.csv
