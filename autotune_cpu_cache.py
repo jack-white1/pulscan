@@ -1,14 +1,11 @@
 import subprocess
 import re
-import numpy as np
-import matplotlib.pyplot as plt
+import csv
 import platform
-import os
 
 def get_cpu_model():
     """Return the CPU model name formatted for a filename."""
     cpu_info = platform.processor()
-    # Remove problematic characters for filenames
     return cpu_info.replace(" ", "_").replace("@", "").replace(",", "")
 
 def run_pulscan(boxcar_chunk_width, normalize_chunk_width, num_cpus):
@@ -29,55 +26,45 @@ def run_pulscan(boxcar_chunk_width, normalize_chunk_width, num_cpus):
 
 def find_optimal_combinations(min_width, max_width, step, num_cpus):
     """Find the optimal combination of boxcar chunk width and normalize chunk width."""
-    size = (max_width - min_width) // step + 1
     times = []
-    boxcar_chunk_widths = normalize_chunk_widths = np.arange(min_width, max_width + 1, step)
-    
-    for boxcar_chunk_width in boxcar_chunk_widths:
-        for normalize_chunk_width in normalize_chunk_widths:
+    for boxcar_chunk_width in range(min_width, max_width + 1, step):
+        for normalize_chunk_width in range(min_width, max_width + 1, step):
             run_times = []
-            for _ in range(16):  # Run the same configuration 16 times
+            for i in range(16):  # Run the same configuration 16 times
                 try:
                     time_spent = run_pulscan(boxcar_chunk_width, normalize_chunk_width, num_cpus)
                     run_times.append(time_spent)
-                    print(f"Run {_+1}: Boxcar Chunk Width = {boxcar_chunk_width}, Normalize Chunk Width = {normalize_chunk_width}, Time = {time_spent}s")
+                    print(f"Run {i+1}: Boxcar Chunk Width = {boxcar_chunk_width}, Normalize Chunk Width = {normalize_chunk_width}, Time = {time_spent}s")
                 except ValueError as e:
                     print(f"Error: {e}")
-                    run_times.append(np.nan)
-
-            average_time = np.nanmean(run_times)
+                    run_times.append(None)
+            
+            if all(time is not None for time in run_times):
+                average_time = sum(run_times) / len(run_times)
+            else:
+                average_time = None
             times.append([boxcar_chunk_width, normalize_chunk_width] + run_times + [average_time])
             print(f"Averaged: Boxcar Chunk Width = {boxcar_chunk_width}, Normalize Chunk Width = {normalize_chunk_width}, Average Time = {average_time}s")
                 
-    return np.array(times)
+    return times
 
 def save_times_data(times, num_cpus):
     """Save the times data to a CSV file named by the CPU model and num_cpus."""
     cpu_model = get_cpu_model()
     filename = f"raw_times_{cpu_model}_ncpus{num_cpus}.csv"
     num_runs = 16
-    header = "Boxcar Chunk Width,Normalize Chunk Width," + ",".join(f"Run {i+1}" for i in range(num_runs)) + ",Average Time"
-    np.savetxt(filename, times, delimiter=",", header=header, fmt='%s', comments='')
+    header = ["Boxcar Chunk Width", "Normalize Chunk Width"] + [f"Run {i+1}" for i in range(num_runs)] + ["Average Time"]
+    with open(filename, 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(header)
+        writer.writerows(times)
     print(f"Data saved to {filename}")
-
-def plot_heatmap(times):
-    """Plot and save a heatmap of the times data."""
-    plt.figure(figsize=(10, 8))
-    heatmap = plt.imshow(times[:, -1 - num_runs].reshape(int(np.sqrt(len(times))), int(np.sqrt(len(times)))), cmap='viridis', origin='lower', aspect='auto')
-    plt.colorbar(heatmap, label='Execution Time (seconds)')
-    plt.xlabel('Boxcar Chunk Width')
-    plt.ylabel('Normalize Chunk Width')
-    plt.title('Execution Time Heatmap')
-    plt.savefig('heatmap.png')
-    plt.close()
-    print("Heatmap saved to 'heatmap.png'.")
 
 # Example usage
 if __name__ == "__main__":
     min_width = 1024
     max_width = 65536
     step = 1024
-    num_cpus = 8
+    num_cpus = 1
     times = find_optimal_combinations(min_width, max_width, step, num_cpus)
     save_times_data(times, num_cpus)
-    plot_heatmap(times)
