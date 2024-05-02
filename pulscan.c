@@ -36,6 +36,11 @@ typedef struct {
     int harmonic; 
 } candidate_struct;
 
+typedef struct {
+    float power;
+    int index;
+} power_index_struct;
+
 int compare_candidate_structs_sigma(const void *a, const void *b) {
     candidate_struct *candidateA = (candidate_struct *)a;
     candidate_struct *candidateB = (candidate_struct *)b;
@@ -656,9 +661,6 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
             memset(sum_array, 0, sizeof(float) * chunkwidth);
 
 
-            float local_max_power;
-            int local_max_index;
-
             for (int z = 0; z < zmax; z++){
 
                 // boxcar filter
@@ -669,8 +671,8 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
 
                 // find max
                 if (z % z_step == 0){
-                    local_max_power = -INFINITY;
-                    local_max_index = 0;
+                    float local_max_power = -INFINITY;
+                    int local_max_index = 0;
                     for (int i = 0; i < chunkwidth; i++){
                         if (sum_array[i] > local_max_power) {
                             local_max_power = sum_array[i];
@@ -704,10 +706,6 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
             // memset sum array to 0
             memset(sum_array, 0, sizeof(float) * chunkwidth);
 
-
-            float local_max_power;
-            int local_max_index;
-
             for (int z = 0; z < zmax; z++){
                 // boxcar filter
                 for (int i = 0; i < chunkwidth; i++){
@@ -717,12 +715,12 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
 
                 // find max
                 if (z % z_step == 0){
-                    local_max_power = -INFINITY;
-                    local_max_index = chunkwidth/2;
+                    float local_max_power = -INFINITY;
+                    int local_max_index = chunkwidth/2;
                     for (int i = 0; i < chunkwidth; i++){
                         if (sum_array[i] > local_max_power) {
                             local_max_power = sum_array[i];
-                            //local_max_index = i; // commenting out this line speeds this loop up by 10x
+                            //local_max_index = i;
                         }
                     }
                     candidates[num_chunks*z + chunk_index].power = local_max_power;
@@ -830,6 +828,56 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
                         target_z = target_z * 2;
                     }
                 }
+            }
+        }
+    } else if (turbomode == 4){
+        #pragma omp parallel for
+        for (int chunk_index = 0; chunk_index < num_chunks; chunk_index++) {
+            float* lookup_array = (float*) malloc(sizeof(float) * (chunkwidth + zmax));
+            power_index_struct* power_index_array = (power_index_struct*) malloc(sizeof(power_index_struct) * chunkwidth);
+
+            // memset lookup array and sum array to zero
+            memset(lookup_array, 0, sizeof(float) * (chunkwidth + zmax));
+            memset(power_index_array, 0, sizeof(power_index_struct) * chunkwidth);
+
+            // initialise lookup array
+            int num_to_copy = chunkwidth + zmax;
+            if (chunk_index * chunkwidth + num_to_copy > valid_length) {
+                num_to_copy = valid_length - chunk_index * chunkwidth;
+            }
+            memcpy(lookup_array, magnitudes_array + chunk_index * chunkwidth, sizeof(float) * num_to_copy);
+
+            // memset sum array to 0
+            memset(power_index_array, 0, sizeof(power_index_struct) * chunkwidth);
+
+            for (int z = 0; z < zmax; z++){
+                // boxcar filter
+                for (int i = 0; i < chunkwidth; i++){
+                    power_index_array[i].power += lookup_array[i + z];
+                }
+
+                for (int i = 0; i < chunkwidth; i++){
+                    power_index_array[i].index = i;
+                }
+
+
+                // find max
+                if (z % z_step == 0){
+                    power_index_struct local_max;
+                    local_max.power = -INFINITY;
+                    local_max.index = 0;
+                    for (int i = 0; i < chunkwidth; i++){
+                        if (power_index_array[i].power > local_max.power) {
+                            local_max = power_index_array[i];
+                        }
+                    }
+                    candidates[num_chunks*z + chunk_index].power = local_max.power;
+                    candidates[num_chunks*z + chunk_index].index = local_max.index + chunk_index*chunkwidth;
+                    candidates[num_chunks*z + chunk_index].z = z;
+                    candidates[num_chunks*z + chunk_index].harmonic = nharmonics;
+                }
+
+                
             }
         }
     }

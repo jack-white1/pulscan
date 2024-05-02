@@ -8,3 +8,5 @@ pulscan_gpu
 *.gpucand
 backups/*
 *.csv
+plot_timings.py
+*.png
