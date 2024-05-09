@@ -680,7 +680,7 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
                         }
                     }
                     candidates[num_chunks*z + chunk_index].power = local_max_power;
-                    candidates[num_chunks*z + chunk_index].index = local_max_index + chunk_index*chunkwidth;
+                    candidates[num_chunks*z + chunk_index].index = local_max_index + chunk_index*chunkwidth + z/2;
                     candidates[num_chunks*z + chunk_index].z = z;
                     candidates[num_chunks*z + chunk_index].harmonic = nharmonics;
                 }
@@ -724,7 +724,7 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
                         }
                     }
                     candidates[num_chunks*z + chunk_index].power = local_max_power;
-                    candidates[num_chunks*z + chunk_index].index = local_max_index + chunk_index*chunkwidth;
+                    candidates[num_chunks*z + chunk_index].index = local_max_index + chunk_index*chunkwidth + z/2;
                     candidates[num_chunks*z + chunk_index].z = z;
                     candidates[num_chunks*z + chunk_index].harmonic = nharmonics;
                 }
@@ -770,7 +770,7 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
                 }
 
                 candidates[num_chunks*z + chunk_index].power = local_max_power;
-                candidates[num_chunks*z + chunk_index].index = local_max_index + chunk_index*chunkwidth;
+                candidates[num_chunks*z + chunk_index].index = local_max_index + chunk_index*chunkwidth + z/2;
                 candidates[num_chunks*z + chunk_index].z = z;
                 candidates[num_chunks*z + chunk_index].harmonic = nharmonics;
             }
@@ -819,7 +819,7 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
                         }
                     }
                     candidates[num_chunks*z + chunk_index].power = local_max_power;
-                    candidates[num_chunks*z + chunk_index].index = local_max_index + chunk_index*chunkwidth;
+                    candidates[num_chunks*z + chunk_index].index = local_max_index + chunk_index*chunkwidth + z/2;
                     candidates[num_chunks*z + chunk_index].z = z;
                     candidates[num_chunks*z + chunk_index].harmonic = nharmonics;
                     if (target_z == 0){
@@ -872,7 +872,7 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
                         }
                     }
                     candidates[num_chunks*z + chunk_index].power = local_max.power;
-                    candidates[num_chunks*z + chunk_index].index = local_max.index + chunk_index*chunkwidth;
+                    candidates[num_chunks*z + chunk_index].index = local_max.index + chunk_index*chunkwidth + z/2;
                     candidates[num_chunks*z + chunk_index].z = z;
                     candidates[num_chunks*z + chunk_index].harmonic = nharmonics;
                 }
