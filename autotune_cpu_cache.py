@@ -41,7 +41,7 @@ def find_optimal_widths(max_width, num_cpus):
     widths = [256 * (2 ** i) for i in range(int(math.log(max_width / 256, 2)) + 1)]
     num_runs = 8
 
-    
+    print(f"Width, average search time, average total time")
     for width in widths:
         normalization_times = []
         search_times = []
@@ -67,12 +67,12 @@ def find_optimal_widths(max_width, num_cpus):
         if search_time_values and total_time_values:
             avg_search_time = sum(search_time_values) / len(search_time_values)
             avg_total_time = sum(total_time_values) / len(total_time_values)
-            print(f"Width = {width}, average search time: {avg_search_time}, average total time: {avg_total_time}")
+            print(f"{width},{avg_search_time},{avg_total_time}")
 
     return normalization_times, search_times, producing_output_times
 
 # Example usage
 if __name__ == "__main__":
     max_width = 524288
-    num_cpus = 24
+    num_cpus = 48
     normalization_times, search_times, producing_output_times = find_optimal_widths(max_width, num_cpus)
