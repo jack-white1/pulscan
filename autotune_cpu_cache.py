@@ -1,6 +1,5 @@
 import subprocess
 import re
-import csv
 import platform
 import math
 import time
@@ -20,19 +19,16 @@ def run_pulscan(boxcar_chunk_width, normalize_chunk_width, num_cpus):
         "-zmax", str(1024)
     ]
     
-    # begin timer in python for overall command execution
-    
+    # Begin timer in python for overall command execution
     starttime = time.time()
-    result = subprocess.run(command, capture_output=True, text=True)
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     stoptime = time.time()
     totaltime = stoptime - starttime
-    #print(f"Total time: {stoptime - starttime}")
     output = result.stdout
-    #print(f"Output: {output}")
+    
     normalization_time_search = re.search(r"Normalizing the data took\s+([0-9.]+) seconds", output)
     search_time_search = re.search(r"Searching the data took\s+([0-9.]+) seconds", output)
     producing_output_time_search = re.search(r"Producing output took\s+([0-9.]+) seconds", output)
-    #print(f"Output: {output}")
     
     if normalization_time_search and search_time_search and producing_output_time_search:
         normalization_time = float(normalization_time_search.group(1))
@@ -47,30 +43,28 @@ def find_optimal_widths(max_width, num_cpus):
     widths = [256 * (2 ** i) for i in range(int(math.log(max_width / 256, 2)) + 1)]
     num_runs = 8
 
+    normalization_times = []
+    search_times = []
+    producing_output_times = []
+    
     for width in widths:
-        normalization_times = []
-        search_times = []
-        producing_output_times = []
-        totaltimes = []
         for i in range(num_runs):
             try:
                 normalization_time, search_time, producing_output_time, totaltime = run_pulscan(width, width, num_cpus)
                 normalization_times.append([width, i+1, normalization_time])
                 search_times.append([width, i+1, search_time])
                 producing_output_times.append([width, i+1, producing_output_time])
-                totaltimes.append([width, i+1, totaltime])
-
-                #print(f"Experiment {i+1}, Width = {width}, Search Time = {search_time}s, Total Time = {totaltime}s")
+                
+                #print(f"Experiment {i+1}, Width = {width}, Normalization Time = {normalization_time}s, Search Time = {search_time}s, Producing Output Time = {producing_output_time}s, Total Time = {totaltime}s")
             except ValueError as e:
                 print(f"Error: {e}")
                 normalization_times.append([width, i+1, None])
                 search_times.append([width, i+1, None])
                 producing_output_times.append([width, i+1, None])
-                totaltimes.append([width, i+1, None])
         
         # Extract the search times and total times for averaging
         search_time_values = [entry[2] for entry in search_times if entry[2] is not None]
-        total_time_values = [entry[2] for entry in totaltimes if entry[2] is not None]
+        total_time_values = [entry[2] for entry in producing_output_times if entry[2] is not None]
 
         if search_time_values and total_time_values:
             avg_search_time = sum(search_time_values) / len(search_time_values)
@@ -78,7 +72,6 @@ def find_optimal_widths(max_width, num_cpus):
             print(f"Width = {width}, average search time: {avg_search_time}, average total time: {avg_total_time}")
 
     return normalization_times, search_times, producing_output_times
-
 
 # Example usage
 if __name__ == "__main__":
