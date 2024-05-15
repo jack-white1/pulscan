@@ -73,6 +73,6 @@ def find_optimal_widths(max_width, num_cpus):
 
 # Example usage
 if __name__ == "__main__":
-    max_width = 131072  # 128K
-    num_cpus = 16
+    max_width = 524288
+    num_cpus = 24
     normalization_times, search_times, producing_output_times = find_optimal_widths(max_width, num_cpus)
