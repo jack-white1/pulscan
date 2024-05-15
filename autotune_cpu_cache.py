@@ -55,7 +55,7 @@ def find_optimal_widths(max_width, num_cpus):
                 search_times.append([width, i+1, search_time])
                 producing_output_times.append([width, i+1, producing_output_time])
                 
-                print(f"Experiment {i+1}, Width = {width}, Normalization Time = {normalization_time}s, Search Time = {search_time}s, Producing Output Time = {producing_output_time}s, Total Time = {totaltime}s")
+                #print(f"Experiment {i+1}, Width = {width}, Normalization Time = {normalization_time}s, Search Time = {search_time}s, Producing Output Time = {producing_output_time}s, Total Time = {totaltime}s")
             except ValueError as e:
                 print(f"Error: {e}")
                 normalization_times.append([width, i+1, None])
