@@ -25,9 +25,10 @@ def run_pulscan(boxcar_chunk_width, normalize_chunk_width, num_cpus):
     starttime = time.time()
     result = subprocess.run(command, capture_output=True, text=True)
     stoptime = time.time()
-    print(f"Total time: {stoptime - starttime}")
+    totaltime = stoptime - starttime
+    #print(f"Total time: {stoptime - starttime}")
     output = result.stdout
-    print(f"Output: {output}")
+    #print(f"Output: {output}")
     normalization_time_search = re.search(r"Normalizing the data took\s+([0-9.]+) seconds", output)
     search_time_search = re.search(r"Searching the data took\s+([0-9.]+) seconds", output)
     producing_output_time_search = re.search(r"Producing output took\s+([0-9.]+) seconds", output)
@@ -37,7 +38,7 @@ def run_pulscan(boxcar_chunk_width, normalize_chunk_width, num_cpus):
         normalization_time = float(normalization_time_search.group(1))
         search_time = float(search_time_search.group(1))
         producing_output_time = float(producing_output_time_search.group(1))
-        return normalization_time, search_time, producing_output_time
+        return normalization_time, search_time, producing_output_time, totaltime
     else:
         raise ValueError("Time outputs not found in the response")
 
@@ -45,46 +46,42 @@ def find_optimal_widths(max_width, num_cpus):
     """Test each width for normalization and searching separately."""
     widths = [256 * (2 ** i) for i in range(int(math.log(max_width / 256, 2)) + 1)]
     num_runs = 8
-    normalization_times = []
-    search_times = []
-    producing_output_times = []
 
     for width in widths:
+        normalization_times = []
+        search_times = []
+        producing_output_times = []
+        totaltimes = []
         for i in range(num_runs):
             try:
-                normalization_time, search_time, producing_output_time = run_pulscan(width, width, num_cpus)
+                normalization_time, search_time, producing_output_time, totaltime = run_pulscan(width, width, num_cpus)
                 normalization_times.append([width, i+1, normalization_time])
                 search_times.append([width, i+1, search_time])
-                producing_output_times.append([width, i+1, producing_output_time])  
-                
-                
-                print(f"Experiment {i+1}, Width = {width}, Normalization Time = {normalization_time}s, Search Time = {search_time}s, Producing Output Time = {producing_output_time}s")
+                producing_output_times.append([width, i+1, producing_output_time])
+                totaltimes.append([width, i+1, totaltime])
+
+                #print(f"Experiment {i+1}, Width = {width}, Search Time = {search_time}s, Total Time = {totaltime}s")
             except ValueError as e:
                 print(f"Error: {e}")
                 normalization_times.append([width, i+1, None])
                 search_times.append([width, i+1, None])
                 producing_output_times.append([width, i+1, None])
+                totaltimes.append([width, i+1, None])
+        
+        # Extract the search times and total times for averaging
+        search_time_values = [entry[2] for entry in search_times if entry[2] is not None]
+        total_time_values = [entry[2] for entry in totaltimes if entry[2] is not None]
+
+        if search_time_values and total_time_values:
+            avg_search_time = sum(search_time_values) / len(search_time_values)
+            avg_total_time = sum(total_time_values) / len(total_time_values)
+            print(f"Width = {width}, average search time: {avg_search_time}, average total time: {avg_total_time}")
 
     return normalization_times, search_times, producing_output_times
 
-def save_times_data(normalization_times, search_times, num_cpus):
-    """Save the times data to a CSV file named by the CPU model and num_cpus."""
-    cpu_model = get_cpu_model()
-    normalization_filename = f"normalization_times_{cpu_model}_ncpus{num_cpus}.csv"
-    search_filename = f"search_times_{cpu_model}_ncpus{num_cpus}.csv"
-
-    for times, filename, label in [(normalization_times, normalization_filename, "Normalization Time"), 
-                                   (search_times, search_filename, "Search Time")]:
-        header = ["Width", "Experiment Number", label]
-        with open(filename, 'w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(header)
-            writer.writerows(times)
-        print(f"Data saved to {filename}")
 
 # Example usage
 if __name__ == "__main__":
     max_width = 131072  # 128K
-    num_cpus = 1
+    num_cpus = 16
     normalization_times, search_times, producing_output_times = find_optimal_widths(max_width, num_cpus)
-    save_times_data(normalization_times, search_times, num_cpus)
