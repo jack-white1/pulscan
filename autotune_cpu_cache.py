@@ -21,7 +21,7 @@ def run_pulscan(boxcar_chunk_width, normalize_chunk_width, num_cpus):
     
     # Begin timer in python for overall command execution
     starttime = time.time()
-    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
     stoptime = time.time()
     totaltime = stoptime - starttime
     output = result.stdout
@@ -55,7 +55,7 @@ def find_optimal_widths(max_width, num_cpus):
                 search_times.append([width, i+1, search_time])
                 producing_output_times.append([width, i+1, producing_output_time])
                 
-                #print(f"Experiment {i+1}, Width = {width}, Normalization Time = {normalization_time}s, Search Time = {search_time}s, Producing Output Time = {producing_output_time}s, Total Time = {totaltime}s")
+                print(f"Experiment {i+1}, Width = {width}, Normalization Time = {normalization_time}s, Search Time = {search_time}s, Producing Output Time = {producing_output_time}s, Total Time = {totaltime}s")
             except ValueError as e:
                 print(f"Error: {e}")
                 normalization_times.append([width, i+1, None])
