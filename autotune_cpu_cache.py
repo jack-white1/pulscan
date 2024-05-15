@@ -74,5 +74,9 @@ def find_optimal_widths(max_width, num_cpus):
 # Example usage
 if __name__ == "__main__":
     max_width = 524288
-    num_cpus = 48
+    try:
+        num_cpus = int(input("Enter the number of CPUs to use: "))
+    except ValueError:
+        print("Invalid input. Please enter an integer.")
+        exit(1)
     normalization_times, search_times, producing_output_times = find_optimal_widths(max_width, num_cpus)
