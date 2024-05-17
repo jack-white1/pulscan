@@ -657,7 +657,7 @@ __global__ void decimateHarmonics(float* magnitudeSquaredArray, float* decimated
 }
 
 // logarithmic zstep, zmax = 256, numThreads = 256
-__global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globalCandidateArray, int numharm, long numFloats, int numCandidatesPerBlock){
+__global__ void boxcarFilterArrayROLLED(float* magnitudeSquaredArray, candidate* globalCandidateArray, int numharm, long numFloats, int numCandidatesPerBlock){
     __shared__ float lookupArray[512];
     __shared__ float sumArray[256];
     __shared__ power_index_struct searchArray[256];
@@ -715,6 +715,469 @@ __global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globa
     }
 }
 
+__global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globalCandidateArray, int numharm, long numFloats, int numCandidatesPerBlock){
+    __shared__ float lookupArray[512];
+    __shared__ float sumArray[256];
+    __shared__ power_index_struct searchArray[256];
+    __shared__ candidate localCandidateArray[16]; // oversized, has to be greater than numCandidatesPerBlock
+
+    int globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
+    int localThreadIndex = threadIdx.x;
+
+    lookupArray[localThreadIndex] = magnitudeSquaredArray[globalThreadIndex];
+    lookupArray[localThreadIndex + 256] = magnitudeSquaredArray[globalThreadIndex + 256];
+
+    __syncthreads();
+
+    // initialize the sum array
+    sumArray[localThreadIndex] = 0.0f;
+    __syncthreads();
+    
+    // begin boxcar filtering
+    int outputCounter = 0;
+
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex];
+    // search at z = 1
+    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
+    searchArray[localThreadIndex].index = globalThreadIndex;
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (localThreadIndex < stride) {
+            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
+                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
+            }
+        }
+        __syncthreads();
+    }
+    if (localThreadIndex == 0) {
+        localCandidateArray[outputCounter].power = searchArray[0].power;
+        localCandidateArray[outputCounter].r = searchArray[0].index;
+        localCandidateArray[outputCounter].z = 1;
+        localCandidateArray[outputCounter].logp = 0.0f;
+        localCandidateArray[outputCounter].numharm = numharm;
+    }
+    outputCounter += 1;
+
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 1];
+    // search at z = 2
+    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
+    searchArray[localThreadIndex].index = globalThreadIndex;
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (localThreadIndex < stride) {
+            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
+                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
+            }
+        }
+        __syncthreads();
+    }
+    if (localThreadIndex == 0) {
+        localCandidateArray[outputCounter].power = searchArray[0].power;
+        localCandidateArray[outputCounter].r = searchArray[0].index;
+        localCandidateArray[outputCounter].z = 2;
+        localCandidateArray[outputCounter].logp = 0.0f;
+        localCandidateArray[outputCounter].numharm = numharm;
+    }
+    outputCounter += 1;
+
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 2];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 3];
+    // search at z = 4
+    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
+    searchArray[localThreadIndex].index = globalThreadIndex;
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (localThreadIndex < stride) {
+            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
+                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
+            }
+        }
+        __syncthreads();
+    }
+    if (localThreadIndex == 0) {
+        localCandidateArray[outputCounter].power = searchArray[0].power;
+        localCandidateArray[outputCounter].r = searchArray[0].index;
+        localCandidateArray[outputCounter].z = 4;
+        localCandidateArray[outputCounter].logp = 0.0f;
+        localCandidateArray[outputCounter].numharm = numharm;
+    }
+    outputCounter += 1;
+
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 4];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 5];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 6];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 7];
+    // search at z = 8
+    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
+    searchArray[localThreadIndex].index = globalThreadIndex;
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (localThreadIndex < stride) {
+            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
+                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
+            }
+        }
+        __syncthreads();
+    }
+    if (localThreadIndex == 0) {
+        localCandidateArray[outputCounter].power = searchArray[0].power;
+        localCandidateArray[outputCounter].r = searchArray[0].index;
+        localCandidateArray[outputCounter].z = 8;
+        localCandidateArray[outputCounter].logp = 0.0f;
+        localCandidateArray[outputCounter].numharm = numharm;
+    }
+    outputCounter += 1;
+
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 8];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 9];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 10];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 11];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 12];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 13];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 14];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 15];
+    // search at z = 16
+    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
+    searchArray[localThreadIndex].index = globalThreadIndex;
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (localThreadIndex < stride) {
+            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
+                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
+            }
+        }
+        __syncthreads();
+    }
+    if (localThreadIndex == 0) {
+        localCandidateArray[outputCounter].power = searchArray[0].power;
+        localCandidateArray[outputCounter].r = searchArray[0].index;
+        localCandidateArray[outputCounter].z = 16;
+        localCandidateArray[outputCounter].logp = 0.0f;
+        localCandidateArray[outputCounter].numharm = numharm;
+    }
+    outputCounter += 1;
+
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 16];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 17];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 18];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 19];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 20];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 21];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 22];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 23];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 24];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 25];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 26];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 27];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 28];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 29];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 30];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 31];
+    // search at z = 32
+    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
+    searchArray[localThreadIndex].index = globalThreadIndex;
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (localThreadIndex < stride) {
+            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
+                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
+            }
+        }
+        __syncthreads();
+    }
+    if (localThreadIndex == 0) {
+        localCandidateArray[outputCounter].power = searchArray[0].power;
+        localCandidateArray[outputCounter].r = searchArray[0].index;
+        localCandidateArray[outputCounter].z = 32;
+        localCandidateArray[outputCounter].logp = 0.0f;
+        localCandidateArray[outputCounter].numharm = numharm;
+    }
+    outputCounter += 1;
+
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 32];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 33];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 34];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 35];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 36];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 37];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 38];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 39];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 40];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 41];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 42];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 43];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 44];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 45];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 46];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 47];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 48];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 49];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 50];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 51];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 52];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 53];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 54];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 55];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 56];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 57];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 58];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 59];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 60];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 61];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 62];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 63];
+    // search at z = 64
+    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
+    searchArray[localThreadIndex].index = globalThreadIndex;
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (localThreadIndex < stride) {
+            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
+                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
+            }
+        }
+        __syncthreads();
+    }
+    if (localThreadIndex == 0) {
+        localCandidateArray[outputCounter].power = searchArray[0].power;
+        localCandidateArray[outputCounter].r = searchArray[0].index;
+        localCandidateArray[outputCounter].z = 64;
+        localCandidateArray[outputCounter].logp = 0.0f;
+        localCandidateArray[outputCounter].numharm = numharm;
+    }
+    outputCounter += 1;
+
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 64];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 65];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 66];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 67];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 68];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 69];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 70];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 71];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 72];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 73];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 74];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 75];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 76];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 77];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 78];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 79];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 80];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 81];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 82];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 83];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 84];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 85];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 86];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 87];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 88];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 89];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 90];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 91];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 92];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 93];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 94];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 95];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 96];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 97];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 98];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 99];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 100];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 101];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 102];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 103];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 104];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 105];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 106];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 107];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 108];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 109];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 110];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 111];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 112];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 113];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 114];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 115];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 116];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 117];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 118];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 119];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 120];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 121];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 122];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 123];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 124];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 125];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 126];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 127];
+    // search at z = 128
+    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
+    searchArray[localThreadIndex].index = globalThreadIndex;
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (localThreadIndex < stride) {
+            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
+                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
+            }
+        }
+        __syncthreads();
+    }
+    if (localThreadIndex == 0) {
+        localCandidateArray[outputCounter].power = searchArray[0].power;
+        localCandidateArray[outputCounter].r = searchArray[0].index;
+        localCandidateArray[outputCounter].z = 128;
+        localCandidateArray[outputCounter].logp = 0.0f;
+        localCandidateArray[outputCounter].numharm = numharm;
+    }
+    outputCounter += 1;
+
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 128];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 129];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 130];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 131];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 132];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 133];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 134];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 135];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 136];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 137];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 138];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 139];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 140];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 141];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 142];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 143];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 144];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 145];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 146];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 147];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 148];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 149];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 150];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 151];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 152];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 153];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 154];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 155];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 156];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 157];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 158];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 159];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 160];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 161];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 162];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 163];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 164];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 165];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 166];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 167];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 168];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 169];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 170];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 171];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 172];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 173];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 174];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 175];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 176];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 177];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 178];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 179];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 180];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 181];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 182];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 183];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 184];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 185];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 186];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 187];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 188];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 189];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 190];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 191];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 192];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 193];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 194];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 195];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 196];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 197];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 198];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 199];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 200];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 201];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 202];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 203];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 204];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 205];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 206];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 207];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 208];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 209];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 210];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 211];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 212];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 213];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 214];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 215];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 216];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 217];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 218];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 219];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 220];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 221];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 222];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 223];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 224];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 225];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 226];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 227];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 228];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 229];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 230];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 231];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 232];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 233];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 234];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 235];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 236];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 237];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 238];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 239];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 240];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 241];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 242];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 243];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 244];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 245];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 246];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 247];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 248];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 249];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 250];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 251];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 252];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 253];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 254];
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 255];
+    // search at z = 256
+    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
+    searchArray[localThreadIndex].index = globalThreadIndex;
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (localThreadIndex < stride) {
+            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
+                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
+            }
+        }
+        __syncthreads();
+    }
+    if (localThreadIndex == 0) {
+        localCandidateArray[outputCounter].power = searchArray[0].power;
+        localCandidateArray[outputCounter].r = searchArray[0].index;
+        localCandidateArray[outputCounter].z = 256;
+        localCandidateArray[outputCounter].logp = 0.0f;
+        localCandidateArray[outputCounter].numharm = numharm;
+    }
+    outputCounter += 1;
+
+    __syncthreads();
+
+    if (localThreadIndex < numCandidatesPerBlock) {
+        globalCandidateArray[blockIdx.x * numCandidatesPerBlock + localThreadIndex] = localCandidateArray[localThreadIndex];
+    }
+}
 
 
 __global__ void calculateLogp(candidate* globalCandidateArray, long numCandidates, int numSum){
