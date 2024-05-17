@@ -958,6 +958,13 @@ int main(int argc, char* argv[]){
     cudaEventCreate(&stop);
     cudaEventRecord(start);
 
+    cudaStream_t stream1, stream2, stream3, stream4;
+
+    cudaStreamCreate(&stream1);
+    cudaStreamCreate(&stream2);
+    cudaStreamCreate(&stream3);
+    cudaStreamCreate(&stream4);
+
     int numThreadsBoxcar = 256;
     int numBlocksBoxcar1 = (numMagnitudes + numThreadsBoxcar - 1)/ numThreadsBoxcar;
     int numBlocksBoxcar2 = (numMagnitudes/2 + numThreadsBoxcar - 1)/ numThreadsBoxcar;
@@ -995,10 +1002,10 @@ int main(int argc, char* argv[]){
         printf("Calling boxcarFilterArray with %d blocks and %d threads per block\n", numBlocksBoxcar4, numThreadsBoxcar);
     }
 
-    boxcarFilterArray<<<numBlocksBoxcar1, numThreadsBoxcar>>>(magnitudeSquaredArray, globalCandidateArray1, 1, numMagnitudes, numCandidatesPerBlock);
-    boxcarFilterArray<<<numBlocksBoxcar2, numThreadsBoxcar>>>(decimatedArrayBy2, globalCandidateArray2, 2, numMagnitudes/2, numCandidatesPerBlock);
-    boxcarFilterArray<<<numBlocksBoxcar3, numThreadsBoxcar>>>(decimatedArrayBy3, globalCandidateArray3, 3, numMagnitudes/3, numCandidatesPerBlock);
-    boxcarFilterArray<<<numBlocksBoxcar4, numThreadsBoxcar>>>(decimatedArrayBy4, globalCandidateArray4, 4, numMagnitudes/4, numCandidatesPerBlock);
+    boxcarFilterArray<<<numBlocksBoxcar1, numThreadsBoxcar, 0, stream1>>>(magnitudeSquaredArray, globalCandidateArray1, 1, numMagnitudes, numCandidatesPerBlock);
+    boxcarFilterArray<<<numBlocksBoxcar2, numThreadsBoxcar, 0, stream2>>>(decimatedArrayBy2, globalCandidateArray2, 2, numMagnitudes/2, numCandidatesPerBlock);
+    boxcarFilterArray<<<numBlocksBoxcar3, numThreadsBoxcar, 0, stream3>>>(decimatedArrayBy3, globalCandidateArray3, 3, numMagnitudes/3, numCandidatesPerBlock);
+    boxcarFilterArray<<<numBlocksBoxcar4, numThreadsBoxcar, 0, stream4>>>(decimatedArrayBy4, globalCandidateArray4, 4, numMagnitudes/4, numCandidatesPerBlock);
     cudaDeviceSynchronize();
 
     //copyDeviceCandidateArrayToHostAndPrint(globalCandidateArray4,numCandidatesPerBlock*numBlocksBoxcar4);
@@ -1027,10 +1034,10 @@ int main(int argc, char* argv[]){
         printf("Calling calculateLogp with %d blocks and %d threads per block\n", numBlocksLogp3, numThreadsLogp);
         printf("Calling calculateLogp with %d blocks and %d threads per block\n", numBlocksLogp4, numThreadsLogp);
     }
-    calculateLogp<<<numBlocksLogp1, numThreadsLogp>>>(globalCandidateArray1, numBlocksBoxcar1*numCandidatesPerBlock, 1);
-    calculateLogp<<<numBlocksLogp2, numThreadsLogp>>>(globalCandidateArray2, numBlocksBoxcar2*numCandidatesPerBlock, 3);
-    calculateLogp<<<numBlocksLogp3, numThreadsLogp>>>(globalCandidateArray3, numBlocksBoxcar3*numCandidatesPerBlock, 6);
-    calculateLogp<<<numBlocksLogp4, numThreadsLogp>>>(globalCandidateArray4, numBlocksBoxcar4*numCandidatesPerBlock, 10);
+    calculateLogp<<<numBlocksLogp1, numThreadsLogp, 0, stream1>>>(globalCandidateArray1, numBlocksBoxcar1*numCandidatesPerBlock, 1);
+    calculateLogp<<<numBlocksLogp2, numThreadsLogp, 0, stream2>>>(globalCandidateArray2, numBlocksBoxcar2*numCandidatesPerBlock, 3);
+    calculateLogp<<<numBlocksLogp3, numThreadsLogp, 0, stream3>>>(globalCandidateArray3, numBlocksBoxcar3*numCandidatesPerBlock, 6);
+    calculateLogp<<<numBlocksLogp4, numThreadsLogp, 0, stream4>>>(globalCandidateArray4, numBlocksBoxcar4*numCandidatesPerBlock, 10);
     cudaDeviceSynchronize();
 
     //copyDeviceCandidateArrayToHostAndPrint(globalCandidateArray1, numCandidatesPerBlock*numBlocksBoxcar1);

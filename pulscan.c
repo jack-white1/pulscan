@@ -763,8 +763,7 @@ void recursive_boxcar_filter_cache_optimised(float* input_magnitudes_array, int 
                 for (int i = 0; i < chunkwidth; i++){
                     sum_array[i] += lookup_array[i + z];
                     if (sum_array[i] > local_max_power) {
-                        local_max_power = sum_array[i];
-                        //local_max_index = i; 
+                        local_max_power = sum_array[i]; 
                     }
                     sum_array[i] += lookup_array[i + z + 1];
                 }
