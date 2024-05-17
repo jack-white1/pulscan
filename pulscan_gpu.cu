@@ -55,6 +55,14 @@ double __device__ power_to_logp(float chi2, float dof){
     }
 }
 
+__global__ void wakeGPUKernel(){
+    // This kernel does nothing, it is used to wake up the GPU
+    // so that the first kernel run is not slow
+    float a = 1.0;
+    float b = 2.0;
+    float c = a + b;
+}
+
 __global__ void separateRealAndImaginaryComponents(float2* rawDataDevice, float* realData, float* imaginaryData, long numComplexFloats){
     long globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
     if (globalThreadIndex < numComplexFloats){
@@ -773,6 +781,7 @@ int main(int argc, char* argv[]){
     auto start_chrono = std::chrono::high_resolution_clock::now();
     
     cudaDeviceSynchronize();
+    wakeGPUKernel<<<1,1>>>();
 
     auto end_chrono = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_chrono - start_chrono);
