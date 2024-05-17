@@ -826,7 +826,7 @@ int main(int argc, char* argv[]){
     printf("Reading file took:                      %f ms\n", (float)duration.count());
 
     // start GPU timing
-    cudaEvent_t start, stop;
+    cudaEvent_t start, stop, overallGPUStart, overallGPUStop;
     // start timing
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
@@ -848,6 +848,10 @@ int main(int argc, char* argv[]){
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start);
+
+    cudaEventCreate(&overallGPUStart);
+    cudaEventCreate(&overallGPUStop);
+    cudaEventRecord(overallGPUStart);
 
     int numMagnitudes = numFloats/2;
 
@@ -1057,6 +1061,13 @@ int main(int argc, char* argv[]){
     milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
     printf("Logp time taken:                        %f ms\n", milliseconds);
+
+    // stop overall GPU timing
+    cudaEventRecord(overallGPUStop);
+    cudaEventSynchronize(overallGPUStop);
+    milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, overallGPUStart, overallGPUStop);
+    printf("Overall GPU time taken:                 %f ms\n", milliseconds);
 
     // start chrono timer for writing output file
     start_chrono = std::chrono::high_resolution_clock::now();
