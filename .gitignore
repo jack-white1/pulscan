@@ -10,3 +10,4 @@ backups/*
 *.csv
 plot_timings.py
 *.png
+pulscan_gpu_power_loop
