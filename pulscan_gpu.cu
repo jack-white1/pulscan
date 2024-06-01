@@ -1180,6 +1180,8 @@ __global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globa
 }
 
 
+
+
 __global__ void calculateLogp(candidate* globalCandidateArray, long numCandidates, int numSum){
     int globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
     if (globalThreadIndex < numCandidates){

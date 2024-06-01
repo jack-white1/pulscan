@@ -1061,7 +1061,10 @@ int main(int argc, char *argv[]) {
 
     if (observation_time_seconds == 0.0f) {
         printf(RED FLASHING "WARNING" RESET ": No observation time provided, frequency and acceleration values will be inaccurate.\n");
-        printf("[Optional] Please specify an observation time with the -tobs flag, e.g. -tobs 600.0\n\n");
+        printf("The observation time is the [Number of bins in the time series] multiplied by [Width of each time series bin (sec)]\n");
+        printf("Both values can be found in the .inf file that accompanies the .fft file.");
+        printf("Please specify an observation time with the -tobs flag, e.g. -tobs 591.396864\n\n");
+        return 1;
     }
 
     // Get the number of harmonics to sum from the command line arguments
