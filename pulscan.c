@@ -1045,15 +1045,55 @@ int main(int argc, char *argv[]) {
     // If not provided, default to 200
     int zmax = 200;
     for (int i = 1; i < argc; ++i) {
-        if (strcmp(argv[i], "-zmax") == 0 && i+1 < argc) {
-            zmax = atoi(argv[i+1]);
+        if (strcmp(argv[i], "-zmax") == 0 && i + 1 < argc) {
+            zmax = atoi(argv[i + 1]);
         }
+    }
+
+    // make a copy of the fft filename called inffilename
+    char *inffilename = strdup(argv[1]);
+
+    // replace the last 3 characters of the string (which should be "fft" with "inf")
+    inffilename[strlen(inffilename) - 3] = 'i';
+    inffilename[strlen(inffilename) - 2] = 'n';
+    inffilename[strlen(inffilename) - 1] = 'f';
+
+    // open the inf file and look for the line starting with
+    // "Width of each time series bin (sec)    =  "
+    FILE *inf_file = fopen(inffilename, "r");
+    if (inf_file == NULL) {
+        printf(RED FLASHING "ERROR" RESET ": Could not open %s file.\n", inffilename);
+        printf("Please ensure that the .inf file is in the same directory as the .fft file.\n");
+        free(inffilename);  // Free allocated memory
+        return 1;
+    }
+
+    char *line = NULL;
+    size_t len = 0;
+    size_t read;
+    float width_of_each_time_series_bin = 0.0f;
+    while ((read = getline(&line, &len, inf_file)) != -1) {
+        if (strstr(line, "Width of each time series bin (sec)    =  ") != NULL) {
+            char *width_of_each_time_series_bin_str = line + 42;
+            width_of_each_time_series_bin = atof(width_of_each_time_series_bin_str);
+            break;
+        }
+    }
+    free(line); // Free the line buffer
+
+    fclose(inf_file); // Close the file
+
+    if (width_of_each_time_series_bin == 0.0f) {
+        printf(RED FLASHING "ERROR" RESET ": Could not find the width of each time series bin in the .inf file.\n");
+        printf("Please ensure that the .inf file is in the correct format.\n");
+        free(inffilename);  // Free allocated memory
+        return 1;
     }
 
     // Get the observation time from the command line arguments
     // If not provided, default to 0.0
     float observation_time_seconds = 0.0f;
-    for (int i = 1; i < argc; ++i) {
+    /*for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "-tobs") == 0 && i+1 < argc) {
             observation_time_seconds = atof(argv[i+1]);
         }
@@ -1065,7 +1105,7 @@ int main(int argc, char *argv[]) {
         printf("Both values can be found in the .inf file that accompanies the .fft file.\n");
         printf("Please specify an observation time with the -tobs flag, e.g. -tobs 591.396864\n\n");
         return 1;
-    }
+    }*/
 
     // Get the number of harmonics to sum from the command line arguments
     // If not provided, default to 1
@@ -1152,6 +1192,13 @@ int main(int argc, char *argv[]) {
     int magnitude_array_size;
     float* magnitudes = compute_magnitude_chunk_normalization_mad(argv[1], &magnitude_array_size, ncpus, zmax, normalize_chunk_size);
 
+    //printf("magnitude_array_size = %d\n", magnitude_array_size);
+
+    //printf("Magnitude array size * width_of_each_time_series_bin = %f\n", ((float)magnitude_array_size) * width_of_each_time_series_bin);
+
+
+    observation_time_seconds = ((float)magnitude_array_size) * width_of_each_time_series_bin * 2.0f;
+    //printf("Observation time = %f seconds\n", observation_time_seconds);
     if(magnitudes == NULL) {
         printf("Failed to compute magnitudes.\n");
         return 1;
