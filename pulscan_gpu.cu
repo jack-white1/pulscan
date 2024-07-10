@@ -58,9 +58,6 @@ double __device__ power_to_logp(float chi2, float dof){
 __global__ void wakeGPUKernel(){
     // This kernel does nothing, it is used to wake up the GPU
     // so that the first kernel run is not slow
-    float a = 1.0;
-    float b = 2.0;
-    float c = a + b;
 }
 
 __global__ void separateRealAndImaginaryComponents(float2* rawDataDevice, float* realData, float* imaginaryData, long numComplexFloats){
@@ -309,10 +306,8 @@ __global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globa
     // initialise the sum array
     sumArray[localThreadIndex] = 0.0f;
     __syncthreads();
-    // begin boxcar filtering
-    int targetZ = 0;
-    int outputCounter = 0;
 
+    // begin boxcar filtering
     // search at z = 0
     sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 0];
     __syncthreads();
@@ -492,7 +487,12 @@ int main(int argc, char* argv[]){
     // Cap the filesize at the nearest lower factor of 8192 for compatibility later on
     numFloats = numFloats - (numFloats % 8192);
     float* rawData = (float*) malloc(sizeof(float) * numFloats);
-    fread(rawData, sizeof(float), numFloats, f);
+    size_t itemsRead = fread(rawData, sizeof(float), numFloats, f);
+    if (itemsRead != numFloats) {
+        // Handle error: not all items were read
+        fprintf(stderr, "Error reading file: only %zu out of %zu items read\n", itemsRead, numFloats);
+        // You might want to take additional action here, like exiting the function or the program
+    }
     fclose(f);
 
     // stop timing
@@ -762,11 +762,20 @@ int main(int argc, char* argv[]){
     cudaMemcpy(hostCandidateArray3, globalCandidateArray3, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar3, cudaMemcpyDeviceToHost);
     cudaMemcpy(hostCandidateArray4, globalCandidateArray4, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar4, cudaMemcpyDeviceToHost);
 
-    // output filename is inputfilename with the .fft stripped and replaced with .gpupulscand
     char outputFilename[256];
-    strncpy(outputFilename, filepath, strlen(filepath) - 4);
-    outputFilename[strlen(filepath) - 4] = '\0';
-    strcat(outputFilename, ".gpucand");
+    size_t filepathLen = strlen(filepath);
+    
+    if (filepathLen > 4 && strcmp(filepath + filepathLen - 4, ".fft") == 0) {
+        // Copy the filepath without the last 4 characters
+        snprintf(outputFilename, sizeof(outputFilename), "%.*s", (int)(filepathLen - 4), filepath);
+    } else {
+        // If the file doesn't end with .fft, just copy the whole filepath
+        snprintf(outputFilename, sizeof(outputFilename), "%s", filepath);
+    }
+    
+    // Append the new extension
+    strncat(outputFilename, ".gpucand", sizeof(outputFilename) - strlen(outputFilename) - 1);
+
 
 
     // write the candidates to a csv file with a header line
