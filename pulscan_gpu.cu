@@ -117,490 +117,62 @@ __global__ void medianOfMediansNormalisation(float* globalArray) {
 
     float a,b,c,d,min,max;
   
-    a = medianArray[localThreadIndex];
-    b = medianArray[localThreadIndex+1024];
-    c = medianArray[localThreadIndex+2048];
-    d = medianArray[localThreadIndex+3072];
-    min = fminf(fminf(fminf(a,b),c),d);
-    max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-    medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    __syncthreads();
-    if(localThreadIndex < 256){
-        a = medianArray[localThreadIndex];
-        b = medianArray[localThreadIndex+256];
-        c = medianArray[localThreadIndex+512];
-        d = medianArray[localThreadIndex+768];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex < 64){
-        a = medianArray[localThreadIndex];
-        b = medianArray[localThreadIndex+64];
-        c = medianArray[localThreadIndex+128];
-        d = medianArray[localThreadIndex+192];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex < 16){
-        a = medianArray[localThreadIndex];
-        b = medianArray[localThreadIndex+16];
-        c = medianArray[localThreadIndex+32];
-        d = medianArray[localThreadIndex+48];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex < 4){
-        a = medianArray[localThreadIndex];
-        b = medianArray[localThreadIndex+4];
-        c = medianArray[localThreadIndex+8];
-        d = medianArray[localThreadIndex+12];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex == 0){
-        a = medianArray[localThreadIndex];
-        b = medianArray[localThreadIndex+1];
-        c = medianArray[localThreadIndex+2];
-        d = medianArray[localThreadIndex+3];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
 
-    __syncthreads();
-
-    median = medianArray[0];
-    __syncthreads();
-
-    //if (localThreadIndex == 0){
-    //    printf("madArray[0]: %f, medianArray[0]: %f\n", madArray[0], medianArray[0]);
-    //}
-
-    madArray[localThreadIndex] = fabsf(madArray[localThreadIndex] - median);
-    madArray[localThreadIndex + 1024] = fabsf(madArray[localThreadIndex + 1024] - median);
-    madArray[localThreadIndex + 2048] = fabsf(madArray[localThreadIndex + 2048] - median);
-    madArray[localThreadIndex + 3072] = fabsf(madArray[localThreadIndex + 3072] - median);
-
-    //if (localThreadIndex == 0){
-    //    printf("fabsf(madArray[0]): %f, medianArray[0]: %f\n", madArray[0], medianArray[0]);
-    //}
-    __syncthreads();
-
-    a = madArray[localThreadIndex];
-    b = madArray[localThreadIndex+1024];
-    c = madArray[localThreadIndex+2048];
-    d = madArray[localThreadIndex+3072];
-    min = fminf(fminf(fminf(a,b),c),d);
-    max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-    madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    __syncthreads();
-
-    if(localThreadIndex < 512){
-        a = madArray[localThreadIndex];
-        b = madArray[localThreadIndex+512];
-        c = madArray[localThreadIndex+1024];
-        d = madArray[localThreadIndex+1536];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex < 256){
-        a = madArray[localThreadIndex];
-        b = madArray[localThreadIndex+256];
-        c = madArray[localThreadIndex+512];
-        d = madArray[localThreadIndex+768];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex < 64){
-        a = madArray[localThreadIndex];
-        b = madArray[localThreadIndex+64];
-        c = madArray[localThreadIndex+128];
-        d = madArray[localThreadIndex+192];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex < 16){
-        a = madArray[localThreadIndex];
-        b = madArray[localThreadIndex+16];
-        c = madArray[localThreadIndex+32];
-        d = madArray[localThreadIndex+48];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex < 4){
-        a = madArray[localThreadIndex];
-        b = madArray[localThreadIndex+4];
-        c = madArray[localThreadIndex+8];
-        d = madArray[localThreadIndex+12];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex == 0){
-        a = madArray[localThreadIndex];
-        b = madArray[localThreadIndex+1];
-        c = madArray[localThreadIndex+2];
-        d = madArray[localThreadIndex+3];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5*1.4826;
-        //printf("a=%f,b=%f,c=%f,d=%f,min=%f,max=%f,1/mad=%f,mad=%.16f\n",a,b,c,d,min,max,madArray[localThreadIndex],1/madArray[localThreadIndex]);
-        
-    }
-    __syncthreads();
-    mad =  madArray[0];
-    __syncthreads();
-
-
-    normalisedArray[localThreadIndex] = (normalisedArray[localThreadIndex] - median) / mad;
-    normalisedArray[localThreadIndex + 1024] = (normalisedArray[localThreadIndex + 1024] - median) / mad;
-    normalisedArray[localThreadIndex + 2048] = (normalisedArray[localThreadIndex + 2048] - median) / mad;
-    normalisedArray[localThreadIndex + 3072] = (normalisedArray[localThreadIndex + 3072] - median) / mad;
-
-    __syncthreads();
-
-    globalArray[globalArrayIndex] = normalisedArray[localThreadIndex];
-    globalArray[globalArrayIndex + 1024] = normalisedArray[localThreadIndex + 1024];
-    globalArray[globalArrayIndex + 2048] = normalisedArray[localThreadIndex + 2048];
-    globalArray[globalArrayIndex + 3072] = normalisedArray[localThreadIndex + 3072];
-
-    //if (localThreadIndex == 0){
-    //    printf("%f,%f,%f,%f\n",globalArray[globalThreadIndex],globalArray[globalThreadIndex + 1024],globalArray[globalThreadIndex + 2048],globalArray[globalThreadIndex + 3072]);
-    //}
-
-    //if (localThreadIndex == 0){
-    //    printf("Median: %f, MAD: %f\n", median, mad);
-    //}
-}
-__global__ void medianOfMediansNormalisationOLD(float* globalArray) {
-    // HARDCODED FOR PERFORMANCE
-    // USE medianOfMediansNormalisationAnyBlockSize() FOR GENERAL USE
-
-    // Each thread loads 4 elements from global memory to shared memory
-    // then calculates the median of these 4 elements, recursively reducing the array down to 
-    //      a single median of medians value
-    // then subtracts the median of medians from each element
-    // then takes the absolute value of each element
-    // then calculates the median of these absolute values
-    // then multiplies this new median (aka median absolute deviation) by 1.4826
-    // then subtracts the median from each original element and divides by the new median absolute deviation
-
-    // Assumes blockDim.x = 1024
-    // TODO: make this work for any blockDim.x
-    __shared__ float medianArray[4096];
-    __shared__ float madArray[4096];
-    __shared__ float normalisedArray[4096];
-
-    //int globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
-    int localThreadIndex = threadIdx.x;
-    int globalArrayIndex = blockDim.x*blockIdx.x*4+threadIdx.x;
-
-    float median;
-    float mad;
-
-    medianArray[localThreadIndex] = globalArray[globalArrayIndex];
-    medianArray[localThreadIndex + 1024] = globalArray[globalArrayIndex + 1024];
-    medianArray[localThreadIndex + 2048] = globalArray[globalArrayIndex + 2048];
-    medianArray[localThreadIndex + 3072] = globalArray[globalArrayIndex + 3072];
-
-    madArray[localThreadIndex] = medianArray[localThreadIndex];
-    madArray[localThreadIndex + 1024] = medianArray[localThreadIndex + 1024];
-    madArray[localThreadIndex + 2048] = medianArray[localThreadIndex + 2048];
-    madArray[localThreadIndex + 3072] = medianArray[localThreadIndex + 3072];
-
-    normalisedArray[localThreadIndex] = medianArray[localThreadIndex];
-    normalisedArray[localThreadIndex + 1024] = medianArray[localThreadIndex + 1024];
-    normalisedArray[localThreadIndex + 2048] = medianArray[localThreadIndex + 2048];
-    normalisedArray[localThreadIndex + 3072] = medianArray[localThreadIndex + 3072];
-
-    __syncthreads();
-
-    float a,b,c,d,min,max;
-  
-    a = medianArray[localThreadIndex];
-    b = medianArray[localThreadIndex+1024];
-    c = medianArray[localThreadIndex+2048];
-    d = medianArray[localThreadIndex+3072];
-    min = fminf(fminf(fminf(a,b),c),d);
-    max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-    medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    __syncthreads();
-
-    if(localThreadIndex < 512){
-        a = medianArray[localThreadIndex];
-        b = medianArray[localThreadIndex+512];
-        c = medianArray[localThreadIndex+1024];
-        d = medianArray[localThreadIndex+1536];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex < 256){
-        a = medianArray[localThreadIndex];
-        b = medianArray[localThreadIndex+256];
-        c = medianArray[localThreadIndex+512];
-        d = medianArray[localThreadIndex+768];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex < 64){
-        a = medianArray[localThreadIndex];
-        b = medianArray[localThreadIndex+64];
-        c = medianArray[localThreadIndex+128];
-        d = medianArray[localThreadIndex+192];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex < 16){
-        a = medianArray[localThreadIndex];
-        b = medianArray[localThreadIndex+16];
-        c = medianArray[localThreadIndex+32];
-        d = medianArray[localThreadIndex+48];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex < 4){
-        a = medianArray[localThreadIndex];
-        b = medianArray[localThreadIndex+4];
-        c = medianArray[localThreadIndex+8];
-        d = medianArray[localThreadIndex+12];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex == 0){
-        a = medianArray[localThreadIndex];
-        b = medianArray[localThreadIndex+1];
-        c = medianArray[localThreadIndex+2];
-        d = medianArray[localThreadIndex+3];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-
-    __syncthreads();
-
-    median = medianArray[0];
-    __syncthreads();
-
-    //if (localThreadIndex == 0){
-    //    printf("madArray[0]: %f, medianArray[0]: %f\n", madArray[0], medianArray[0]);
-    //}
-
-    madArray[localThreadIndex] = fabsf(madArray[localThreadIndex] - median);
-    madArray[localThreadIndex + 1024] = fabsf(madArray[localThreadIndex + 1024] - median);
-    madArray[localThreadIndex + 2048] = fabsf(madArray[localThreadIndex + 2048] - median);
-    madArray[localThreadIndex + 3072] = fabsf(madArray[localThreadIndex + 3072] - median);
-
-    //if (localThreadIndex == 0){
-    //    printf("fabsf(madArray[0]): %f, medianArray[0]: %f\n", madArray[0], medianArray[0]);
-    //}
-    __syncthreads();
-
-    a = madArray[localThreadIndex];
-    b = madArray[localThreadIndex+1024];
-    c = madArray[localThreadIndex+2048];
-    d = madArray[localThreadIndex+3072];
-    min = fminf(fminf(fminf(a,b),c),d);
-    max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-    madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    __syncthreads();
-
-    if(localThreadIndex < 512){
-        a = madArray[localThreadIndex];
-        b = madArray[localThreadIndex+512];
-        c = madArray[localThreadIndex+1024];
-        d = madArray[localThreadIndex+1536];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex < 256){
-        a = madArray[localThreadIndex];
-        b = madArray[localThreadIndex+256];
-        c = madArray[localThreadIndex+512];
-        d = madArray[localThreadIndex+768];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex < 64){
-        a = madArray[localThreadIndex];
-        b = madArray[localThreadIndex+64];
-        c = madArray[localThreadIndex+128];
-        d = madArray[localThreadIndex+192];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex < 16){
-        a = madArray[localThreadIndex];
-        b = madArray[localThreadIndex+16];
-        c = madArray[localThreadIndex+32];
-        d = madArray[localThreadIndex+48];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex < 4){
-        a = madArray[localThreadIndex];
-        b = madArray[localThreadIndex+4];
-        c = madArray[localThreadIndex+8];
-        d = madArray[localThreadIndex+12];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
-    }
-    __syncthreads();
-    if(localThreadIndex == 0){
-        a = madArray[localThreadIndex];
-        b = madArray[localThreadIndex+1];
-        c = madArray[localThreadIndex+2];
-        d = madArray[localThreadIndex+3];
-        min = fminf(fminf(fminf(a,b),c),d);
-        max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-        madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5*1.4826;
-        //printf("a=%f,b=%f,c=%f,d=%f,min=%f,max=%f,1/mad=%f,mad=%.16f\n",a,b,c,d,min,max,madArray[localThreadIndex],1/madArray[localThreadIndex]);
-        
-    }
-    __syncthreads();
-    mad =  madArray[0];
-    __syncthreads();
-
-
-    normalisedArray[localThreadIndex] = (normalisedArray[localThreadIndex] - median) / mad;
-    normalisedArray[localThreadIndex + 1024] = (normalisedArray[localThreadIndex + 1024] - median) / mad;
-    normalisedArray[localThreadIndex + 2048] = (normalisedArray[localThreadIndex + 2048] - median) / mad;
-    normalisedArray[localThreadIndex + 3072] = (normalisedArray[localThreadIndex + 3072] - median) / mad;
-
-    __syncthreads();
-
-    globalArray[globalArrayIndex] = normalisedArray[localThreadIndex];
-    globalArray[globalArrayIndex + 1024] = normalisedArray[localThreadIndex + 1024];
-    globalArray[globalArrayIndex + 2048] = normalisedArray[localThreadIndex + 2048];
-    globalArray[globalArrayIndex + 3072] = normalisedArray[localThreadIndex + 3072];
-
-    //if (localThreadIndex == 0){
-    //    printf("%f,%f,%f,%f\n",globalArray[globalThreadIndex],globalArray[globalThreadIndex + 1024],globalArray[globalThreadIndex + 2048],globalArray[globalThreadIndex + 3072]);
-    //}
-
-    //if (localThreadIndex == 0){
-    //    printf("Median: %f, MAD: %f\n", median, mad);
-    //}
-}
-
-/*
-__global__ void medianOfMediansNormalisationAnyBlockSize(float* globalArray) {
-    extern __shared__ float sharedMemory[];
-    // Each thread loads 4 elements from global memory to shared memory
-    __shared__ float* medianArray = &sharedMemory[0];
-    __shared__ float* madArray = &sharedMemory[blockDim.x];
-    __shared__ float* normalisedArray = &sharedMemory[2*blockDim.x];
-
-    int localThreadIndex = threadIdx.x;
-    int globalArrayIndex = blockDim.x*blockIdx.x*4+threadIdx.x;
-
-    float a,b,c,d,min,max,median,mad;
-
-    medianArray[localThreadIndex] = globalArray[globalArrayIndex];
-    medianArray[localThreadIndex + blockDim.x] = globalArray[globalArrayIndex + blockDim.x];
-    medianArray[localThreadIndex + 2*blockDim.x] = globalArray[globalArrayIndex + 2*blockDim.x];
-    medianArray[localThreadIndex + 3*blockDim.x] = globalArray[globalArrayIndex + 3*blockDim.x];
-
-    madArray[localThreadIndex] = medianArray[localThreadIndex];
-    madArray[localThreadIndex + blockDim.x] = medianArray[localThreadIndex + blockDim.x];
-    madArray[localThreadIndex + 2*blockDim.x] = medianArray[localThreadIndex + 2*blockDim.x];
-    madArray[localThreadIndex + 3*blockDim.x] = medianArray[localThreadIndex + 3*blockDim.x];
-
-    normalisedArray[localThreadIndex] = medianArray[localThreadIndex];
-    normalisedArray[localThreadIndex + blockDim.x] = medianArray[localThreadIndex + blockDim.x];
-    normalisedArray[localThreadIndex + 2*blockDim.x] = medianArray[localThreadIndex + 2*blockDim.x];
-    normalisedArray[localThreadIndex + 3*blockDim.x] = medianArray[localThreadIndex + 3*blockDim.x];
-
-    __syncthreads();
-
-    for (int stride = blockDim.x; stride > 0; stride >>= 1){
-        if(localThreadIndex < stride){
+    for (int upperThreadIndex = 1024; upperThreadIndex > 0; upperThreadIndex >>=2){
+        if(localThreadIndex < upperThreadIndex){
             a = medianArray[localThreadIndex];
-            b = medianArray[localThreadIndex+stride];
-            c = medianArray[localThreadIndex+2*stride];
-            d = medianArray[localThreadIndex+3*stride];
+            b = medianArray[localThreadIndex+upperThreadIndex];
+            c = medianArray[localThreadIndex+upperThreadIndex*2];
+            d = medianArray[localThreadIndex+upperThreadIndex*3];
             min = fminf(fminf(fminf(a,b),c),d);
             max = fmaxf(fmaxf(fmaxf(a,b),c),d);
             medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
         }
         __syncthreads();
     }
-  
+
 
     median = medianArray[0];
     __syncthreads();
 
     madArray[localThreadIndex] = fabsf(madArray[localThreadIndex] - median);
-    madArray[localThreadIndex + blockDim.x] = fabsf(madArray[localThreadIndex + blockDim.x] - median);
-    madArray[localThreadIndex + 2*blockDim.x] = fabsf(madArray[localThreadIndex + 2*blockDim.x] - median);
-    madArray[localThreadIndex + 3*blockDim.x] = fabsf(madArray[localThreadIndex + 3*blockDim.x] - median);
+    madArray[localThreadIndex + 1024] = fabsf(madArray[localThreadIndex + 1024] - median);
+    madArray[localThreadIndex + 2048] = fabsf(madArray[localThreadIndex + 2048] - median);
+    madArray[localThreadIndex + 3072] = fabsf(madArray[localThreadIndex + 3072] - median);
 
     __syncthreads();
-
-    for (int stride = blockDim.x; stride > 0; stride >>= 1){
-        if(localThreadIndex < stride){
+    
+    for (int upperThreadIndex = 1024; upperThreadIndex > 0; upperThreadIndex >>=2){
+        if(localThreadIndex < upperThreadIndex){
             a = madArray[localThreadIndex];
-            b = madArray[localThreadIndex+stride];
-            c = madArray[localThreadIndex+2*stride];
-            d = madArray[localThreadIndex+3*stride];
+            b = madArray[localThreadIndex+upperThreadIndex];
+            c = madArray[localThreadIndex+upperThreadIndex*2];
+            d = madArray[localThreadIndex+upperThreadIndex*3];
             min = fminf(fminf(fminf(a,b),c),d);
             max = fmaxf(fmaxf(fmaxf(a,b),c),d);
             madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
         }
         __syncthreads();
     }
-
-    mad =  madArray[0];
+    
+    mad =  madArray[0]*1.4826;
     __syncthreads();
 
+
     normalisedArray[localThreadIndex] = (normalisedArray[localThreadIndex] - median) / mad;
-    normalisedArray[localThreadIndex + blockDim.x] = (normalisedArray[localThreadIndex + blockDim.x] - median) / mad;
-    normalisedArray[localThreadIndex + 2*blockDim.x] = (normalisedArray[localThreadIndex + 2*blockDim.x] - median) / mad;
-    normalisedArray[localThreadIndex + 3*blockDim.x] = (normalisedArray[localThreadIndex + 3*blockDim.x] - median) / mad;
+    normalisedArray[localThreadIndex + 1024] = (normalisedArray[localThreadIndex + 1024] - median) / mad;
+    normalisedArray[localThreadIndex + 2048] = (normalisedArray[localThreadIndex + 2048] - median) / mad;
+    normalisedArray[localThreadIndex + 3072] = (normalisedArray[localThreadIndex + 3072] - median) / mad;
 
     __syncthreads();
 
     globalArray[globalArrayIndex] = normalisedArray[localThreadIndex];
-    globalArray[globalArrayIndex + blockDim.x] = normalisedArray[localThreadIndex + blockDim.x];
-    globalArray[globalArrayIndex + 2*blockDim.x] = normalisedArray[localThreadIndex + 2*blockDim.x];
-    globalArray[globalArrayIndex + 3*blockDim.x] = normalisedArray[localThreadIndex + 3*blockDim.x];
+    globalArray[globalArrayIndex + 1024] = normalisedArray[localThreadIndex + 1024];
+    globalArray[globalArrayIndex + 2048] = normalisedArray[localThreadIndex + 2048];
+    globalArray[globalArrayIndex + 3072] = normalisedArray[localThreadIndex + 3072];
+
 }
-*/
+
 
 __global__ void magnitudeSquared(float* realData, float* imaginaryData, float* magnitudeSquaredArray, long numFloats){
     int globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
@@ -656,6 +228,27 @@ __global__ void decimateHarmonics(float* magnitudeSquaredArray, float* decimated
 
 }
 
+// I WANT TO __FORCEINLINE__ THIS FUNCTION BUT APPARENTLY YOU CAN'T INLINE FUNCTIONS WITH A __SYNCTHREADS() IN
+__device__ void searchAndUpdate(float* sumArray, power_index_struct* searchArray, candidate* localCandidateArray, int z, int outputCounter, int localThreadIndex, int globalThreadIndex, int numharm){
+    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
+    searchArray[localThreadIndex].index = globalThreadIndex;
+    for (int stride = blockDim.x / 2; stride>0; stride /= 2){
+        if (localThreadIndex < stride){
+            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power){
+                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
+            }
+        }
+        __syncthreads();
+    }
+    if (localThreadIndex == 0){
+        localCandidateArray[outputCounter].power = searchArray[0].power;
+        localCandidateArray[outputCounter].r =searchArray[0].index;
+        localCandidateArray[outputCounter].z = z;
+        localCandidateArray[outputCounter].logp = 0.0f;
+        localCandidateArray[outputCounter].numharm = numharm;
+    }
+}
+
 // logarithmic zstep, zmax = 256, numThreads = 256
 __global__ void boxcarFilterArrayROLLED(float* magnitudeSquaredArray, candidate* globalCandidateArray, int numharm, long numFloats, int numCandidatesPerBlock){
     __shared__ float lookupArray[512];
@@ -681,23 +274,7 @@ __global__ void boxcarFilterArrayROLLED(float* magnitudeSquaredArray, candidate*
     for (int z = 0; z <= 256; z+=1){
         sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + z];
         if (z == targetZ){
-            searchArray[localThreadIndex].power = sumArray[localThreadIndex];
-            searchArray[localThreadIndex].index = globalThreadIndex;
-            for (int stride = blockDim.x / 2; stride>0; stride /= 2){
-                if (localThreadIndex < stride){
-                    if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power){
-                        searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
-                    }
-                }
-                __syncthreads();
-            }
-            if (localThreadIndex == 0){
-                localCandidateArray[outputCounter].power = searchArray[0].power;
-                localCandidateArray[outputCounter].r =searchArray[0].index;
-                localCandidateArray[outputCounter].z = z;
-                localCandidateArray[outputCounter].logp = 0.0f;
-                localCandidateArray[outputCounter].numharm = numharm;
-            }
+            searchAndUpdate(sumArray, searchArray, localCandidateArray, z, outputCounter, localThreadIndex, globalThreadIndex, numharm);
             outputCounter+=1;
             if (targetZ == 0){
                 targetZ = 1;
@@ -719,7 +296,7 @@ __global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globa
     __shared__ float lookupArray[512];
     __shared__ float sumArray[256];
     __shared__ power_index_struct searchArray[256];
-    __shared__ candidate localCandidateArray[16]; // oversized, has to be greater than numCandidatesPerBlock
+    __shared__ candidate localCandidateArray[16]; //oversized, has to be greater than numCandidatesPerBlock
 
     int globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
     int localThreadIndex = threadIdx.x;
@@ -729,453 +306,86 @@ __global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globa
 
     __syncthreads();
 
-    // initialize the sum array
+    // initialise the sum array
     sumArray[localThreadIndex] = 0.0f;
     __syncthreads();
-    
     // begin boxcar filtering
+    int targetZ = 0;
     int outputCounter = 0;
 
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex];
+    // search at z = 0
+    sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 0];
+    __syncthreads();
+    searchAndUpdate(sumArray, searchArray, localCandidateArray, 0, 0, localThreadIndex, globalThreadIndex, numharm);
+
     // search at z = 1
-    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
-    searchArray[localThreadIndex].index = globalThreadIndex;
-    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
-        if (localThreadIndex < stride) {
-            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
-                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
-            }
-        }
-        __syncthreads();
-    }
-    if (localThreadIndex == 0) {
-        localCandidateArray[outputCounter].power = searchArray[0].power;
-        localCandidateArray[outputCounter].r = searchArray[0].index;
-        localCandidateArray[outputCounter].z = 1;
-        localCandidateArray[outputCounter].logp = 0.0f;
-        localCandidateArray[outputCounter].numharm = numharm;
-    }
-    outputCounter += 1;
+    sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 1];
+    __syncthreads();
+    searchAndUpdate(sumArray, searchArray, localCandidateArray, 1, 1, localThreadIndex, globalThreadIndex, numharm);
 
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 1];
     // search at z = 2
-    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
-    searchArray[localThreadIndex].index = globalThreadIndex;
-    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
-        if (localThreadIndex < stride) {
-            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
-                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
-            }
-        }
-        __syncthreads();
-    }
-    if (localThreadIndex == 0) {
-        localCandidateArray[outputCounter].power = searchArray[0].power;
-        localCandidateArray[outputCounter].r = searchArray[0].index;
-        localCandidateArray[outputCounter].z = 2;
-        localCandidateArray[outputCounter].logp = 0.0f;
-        localCandidateArray[outputCounter].numharm = numharm;
-    }
-    outputCounter += 1;
+    sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 2];
+    __syncthreads();
+    searchAndUpdate(sumArray, searchArray, localCandidateArray, 2, 2, localThreadIndex, globalThreadIndex, numharm);
 
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 2];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 3];
     // search at z = 4
-    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
-    searchArray[localThreadIndex].index = globalThreadIndex;
-    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
-        if (localThreadIndex < stride) {
-            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
-                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
-            }
-        }
-        __syncthreads();
-    }
-    if (localThreadIndex == 0) {
-        localCandidateArray[outputCounter].power = searchArray[0].power;
-        localCandidateArray[outputCounter].r = searchArray[0].index;
-        localCandidateArray[outputCounter].z = 4;
-        localCandidateArray[outputCounter].logp = 0.0f;
-        localCandidateArray[outputCounter].numharm = numharm;
-    }
-    outputCounter += 1;
+    sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 3];
+    sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 4];
+    __syncthreads();
+    searchAndUpdate(sumArray, searchArray, localCandidateArray, 4, 3, localThreadIndex, globalThreadIndex, numharm);
 
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 4];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 5];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 6];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 7];
     // search at z = 8
-    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
-    searchArray[localThreadIndex].index = globalThreadIndex;
-    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
-        if (localThreadIndex < stride) {
-            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
-                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
-            }
-        }
-        __syncthreads();
-    }
-    if (localThreadIndex == 0) {
-        localCandidateArray[outputCounter].power = searchArray[0].power;
-        localCandidateArray[outputCounter].r = searchArray[0].index;
-        localCandidateArray[outputCounter].z = 8;
-        localCandidateArray[outputCounter].logp = 0.0f;
-        localCandidateArray[outputCounter].numharm = numharm;
-    }
-    outputCounter += 1;
+    sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 5];
+    sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 6];
+    sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 7];
+    sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 8];
+    __syncthreads();
+    searchAndUpdate(sumArray, searchArray, localCandidateArray, 8, 4, localThreadIndex, globalThreadIndex, numharm);
 
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 8];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 9];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 10];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 11];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 12];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 13];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 14];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 15];
     // search at z = 16
-    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
-    searchArray[localThreadIndex].index = globalThreadIndex;
-    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
-        if (localThreadIndex < stride) {
-            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
-                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
-            }
-        }
-        __syncthreads();
+    #pragma unroll
+    for (int z = 9; z < 17; z++){
+        sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + z];
     }
-    if (localThreadIndex == 0) {
-        localCandidateArray[outputCounter].power = searchArray[0].power;
-        localCandidateArray[outputCounter].r = searchArray[0].index;
-        localCandidateArray[outputCounter].z = 16;
-        localCandidateArray[outputCounter].logp = 0.0f;
-        localCandidateArray[outputCounter].numharm = numharm;
-    }
-    outputCounter += 1;
+    __syncthreads();
+    searchAndUpdate(sumArray, searchArray, localCandidateArray, 16, 5, localThreadIndex, globalThreadIndex, numharm);
 
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 16];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 17];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 18];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 19];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 20];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 21];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 22];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 23];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 24];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 25];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 26];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 27];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 28];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 29];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 30];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 31];
     // search at z = 32
-    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
-    searchArray[localThreadIndex].index = globalThreadIndex;
-    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
-        if (localThreadIndex < stride) {
-            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
-                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
-            }
-        }
-        __syncthreads();
+    #pragma unroll
+    for (int z = 17; z < 33; z++){
+        sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + z];
     }
-    if (localThreadIndex == 0) {
-        localCandidateArray[outputCounter].power = searchArray[0].power;
-        localCandidateArray[outputCounter].r = searchArray[0].index;
-        localCandidateArray[outputCounter].z = 32;
-        localCandidateArray[outputCounter].logp = 0.0f;
-        localCandidateArray[outputCounter].numharm = numharm;
-    }
-    outputCounter += 1;
+    __syncthreads();
+    searchAndUpdate(sumArray, searchArray, localCandidateArray, 32, 6, localThreadIndex, globalThreadIndex, numharm);
 
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 32];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 33];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 34];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 35];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 36];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 37];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 38];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 39];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 40];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 41];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 42];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 43];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 44];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 45];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 46];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 47];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 48];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 49];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 50];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 51];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 52];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 53];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 54];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 55];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 56];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 57];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 58];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 59];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 60];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 61];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 62];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 63];
     // search at z = 64
-    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
-    searchArray[localThreadIndex].index = globalThreadIndex;
-    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
-        if (localThreadIndex < stride) {
-            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
-                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
-            }
-        }
-        __syncthreads();
+    #pragma unroll
+    for (int z = 33; z < 65; z++){
+        sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + z];
     }
-    if (localThreadIndex == 0) {
-        localCandidateArray[outputCounter].power = searchArray[0].power;
-        localCandidateArray[outputCounter].r = searchArray[0].index;
-        localCandidateArray[outputCounter].z = 64;
-        localCandidateArray[outputCounter].logp = 0.0f;
-        localCandidateArray[outputCounter].numharm = numharm;
-    }
-    outputCounter += 1;
+    __syncthreads();
+    searchAndUpdate(sumArray, searchArray, localCandidateArray, 64, 7, localThreadIndex, globalThreadIndex, numharm);
 
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 64];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 65];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 66];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 67];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 68];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 69];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 70];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 71];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 72];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 73];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 74];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 75];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 76];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 77];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 78];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 79];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 80];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 81];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 82];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 83];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 84];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 85];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 86];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 87];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 88];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 89];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 90];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 91];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 92];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 93];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 94];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 95];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 96];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 97];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 98];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 99];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 100];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 101];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 102];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 103];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 104];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 105];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 106];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 107];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 108];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 109];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 110];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 111];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 112];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 113];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 114];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 115];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 116];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 117];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 118];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 119];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 120];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 121];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 122];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 123];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 124];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 125];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 126];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 127];
     // search at z = 128
-    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
-    searchArray[localThreadIndex].index = globalThreadIndex;
-    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
-        if (localThreadIndex < stride) {
-            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
-                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
-            }
-        }
-        __syncthreads();
+    #pragma unroll
+    for (int z = 65; z < 129; z++){
+        sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + z];
     }
-    if (localThreadIndex == 0) {
-        localCandidateArray[outputCounter].power = searchArray[0].power;
-        localCandidateArray[outputCounter].r = searchArray[0].index;
-        localCandidateArray[outputCounter].z = 128;
-        localCandidateArray[outputCounter].logp = 0.0f;
-        localCandidateArray[outputCounter].numharm = numharm;
-    }
-    outputCounter += 1;
+    __syncthreads();
+    searchAndUpdate(sumArray, searchArray, localCandidateArray, 128, 8, localThreadIndex, globalThreadIndex, numharm);
 
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 128];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 129];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 130];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 131];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 132];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 133];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 134];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 135];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 136];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 137];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 138];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 139];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 140];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 141];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 142];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 143];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 144];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 145];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 146];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 147];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 148];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 149];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 150];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 151];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 152];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 153];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 154];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 155];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 156];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 157];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 158];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 159];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 160];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 161];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 162];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 163];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 164];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 165];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 166];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 167];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 168];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 169];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 170];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 171];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 172];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 173];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 174];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 175];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 176];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 177];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 178];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 179];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 180];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 181];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 182];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 183];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 184];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 185];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 186];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 187];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 188];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 189];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 190];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 191];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 192];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 193];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 194];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 195];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 196];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 197];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 198];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 199];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 200];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 201];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 202];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 203];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 204];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 205];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 206];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 207];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 208];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 209];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 210];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 211];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 212];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 213];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 214];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 215];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 216];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 217];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 218];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 219];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 220];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 221];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 222];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 223];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 224];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 225];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 226];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 227];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 228];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 229];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 230];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 231];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 232];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 233];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 234];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 235];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 236];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 237];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 238];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 239];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 240];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 241];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 242];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 243];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 244];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 245];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 246];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 247];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 248];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 249];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 250];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 251];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 252];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 253];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 254];
-    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 255];
     // search at z = 256
-    searchArray[localThreadIndex].power = sumArray[localThreadIndex];
-    searchArray[localThreadIndex].index = globalThreadIndex;
-    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
-        if (localThreadIndex < stride) {
-            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power) {
-                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
-            }
-        }
-        __syncthreads();
+    #pragma unroll
+    for (int z = 129; z < 257; z++){
+        sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + z];
     }
-    if (localThreadIndex == 0) {
-        localCandidateArray[outputCounter].power = searchArray[0].power;
-        localCandidateArray[outputCounter].r = searchArray[0].index;
-        localCandidateArray[outputCounter].z = 256;
-        localCandidateArray[outputCounter].logp = 0.0f;
-        localCandidateArray[outputCounter].numharm = numharm;
-    }
-    outputCounter += 1;
+    __syncthreads();
+    searchAndUpdate(sumArray, searchArray, localCandidateArray, 256, 9, localThreadIndex, globalThreadIndex, numharm);
 
     __syncthreads();
 
-    if (localThreadIndex < numCandidatesPerBlock) {
-        globalCandidateArray[blockIdx.x * numCandidatesPerBlock + localThreadIndex] = localCandidateArray[localThreadIndex];
+    if (localThreadIndex < numCandidatesPerBlock){
+        globalCandidateArray[blockIdx.x*numCandidatesPerBlock+localThreadIndex] = localCandidateArray[localThreadIndex];
     }
 }
 
