@@ -776,14 +776,12 @@ int main(int argc, char* argv[]){
     // Append the new extension
     strncat(outputFilename, ".gpucand", sizeof(outputFilename) - strlen(outputFilename) - 1);
 
-
-
     // write the candidates to a csv file with a header line
     //FILE *csvFile = fopen("gpucandidates.csv", "w");
     FILE *csvFile = fopen(outputFilename, "w");
     fprintf(csvFile, "logp,r,z,power,numharm\n");
 
-    float logpThreshold = -25;
+    float logpThreshold = -10;
 
 
 

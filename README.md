@@ -27,52 +27,25 @@ An .fft file is a binary file consisting of an even number of FP32 floats, where
 
 ## Installation
 
-First, clone the Pulscan repository to your local machine:
+Clone the Pulscan repository to your local machine and run ```make all```:
 
 ```bash
 git clone https://github.com/jack-white1/pulscan
 cd pulscan
+make all
 ```
 
-### For Hybrid (CPU/GPU) Version
-
-For the hybrid version that utilizes both CPU and GPU resources:
-
-1. Compile the local CDF library:
-
-   ```bash
-   gcc -c localcdflib.c -o localcdflib.o -lm -Ofast
-   ```
-
-2. Compile the Pulscan hybrid version:
-
-   ```bash
-   nvcc pulscan_hybrid.cu localcdflib.o -o pulscan_hybrid -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math
-   ```
-
-### For GPU Version
-
-To compile the GPU-only version of Pulscan:
+If you just want the CPU version:
 
 ```bash
-nvcc pulscan_gpu.cu -o pulscan_gpu -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math
+make cpu
 ```
 
-### For CPU Version
+If you just want the GPU version:
 
-To compile the CPU version of Pulscan, follow these steps:
-
-1. Compile the local CDF library:
-
-   ```bash
-   gcc -c localcdflib.c -o localcdflib.o -lm -Ofast
-   ```
-
-2. Compile the Pulscan CPU version:
-
-   ```bash
-   gcc pulscan.c localcdflib.o -o pulscan -lm -fopenmp -Ofast
-   ```
+```bash
+make gpu
+```
 
 ## Usage
 
