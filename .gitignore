@@ -11,3 +11,4 @@ backups/*
 plot_timings.py
 *.png
 pulscan_gpu_power_loop
+pulscan_dft

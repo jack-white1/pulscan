@@ -239,7 +239,7 @@ __device__ void searchAndUpdate(float* sumArray, power_index_struct* searchArray
     }
     if (localThreadIndex == 0){
         localCandidateArray[outputCounter].power = searchArray[0].power;
-        localCandidateArray[outputCounter].r =searchArray[0].index;
+        localCandidateArray[outputCounter].r = searchArray[0].index;
         localCandidateArray[outputCounter].z = z;
         localCandidateArray[outputCounter].logp = 0.0f;
         localCandidateArray[outputCounter].numharm = numharm;
