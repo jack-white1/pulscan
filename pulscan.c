@@ -1000,23 +1000,23 @@ int main(int argc, char *argv[]) {
     printf("%s\n", pulscan_frame);
 
     if (argc < 2) {
-        printf("USAGE: %s file [-ncpus int] [-zmax int] [-numharm int] [-tobs float] [-sigma float] [-zstep int] [-chunkwidth int] [-turbomode int]\n", argv[0]);
+        printf("USAGE: %s file [-ncpus int] [-zmax int] [-numharm int] [-sigma float] [-zstep int] [-chunkwidth int] [-turbomode int]\n", argv[0]);
         printf("Required arguments:\n");
         printf("\tfile [string]\t\tThe input file path (.fft file format such as the output of realfft)\n");
         printf("Optional arguments:\n");
         printf("\t-ncpus [int]\t\tThe number of OpenMP threads to use (default 1)\n");
         printf("\t-zmax [int]\t\tThe max boxcar width (default = 200, similar meaning to zmax in accelsearch)\n");
         printf("\t-numharm [int]\t\tThe maximum number of harmonics to sum (default = 1, options are 1, 2, 3 or 4)\n");
-        printf("\t-tobs [float]\t\tThe observation time in seconds, this " BOLD "MUST BE SPECIFIED ACCURATELY" RESET " if you want physical frequency/acceleration values.\n");
+        //printf("\t-tobs [float]\t\tThe observation time in seconds, this " BOLD "MUST BE SPECIFIED ACCURATELY" RESET " if you want physical frequency/acceleration values.\n");
         printf("\t-sigma [float]\t\tThe sigma threshold (default = 2.0), candidates with sigma below this value will not be written to the output file\n");
         printf("\t-zstep [int]\t\tThe step size in z (default = 2).\n");
         printf("\t-chunkwidth [int]\tThe chunk width (units are r-bins, default = 32768), you will get up to ( rmax * zmax ) / ( chunkwidth * zstep ) candidates\n");
         printf("\t-normalizechunkwidth [int]\tThe size of the chunks in the normalization process (default = zmax * 30)\n");
         printf("\t-turbo [int]\t\t" BOLD ITALIC RED "T" GREEN "U" YELLOW "R" BLUE "B" MAGENTA "O" RESET " mode - increase speed by trading off candidate localisation accuracy (default off = 0, options are 0, 1, 2, 3)\n");
-        printf("\t\t\t\t  -turbo 0: Localise candidates to their exact (r,z) bin location (default setting)\n");
-        printf("\t\t\t\t  -turbo 1: Only localise candidates to their chunk of the frequency spectrum. This will only give the r-bin to within -chunkwidth accuracy\n");
-        printf("\t\t\t\t  -turbo 2: Option 1 and fix -zstep at 2. Automatically enabled if -turbo 1 and -zstep left as default. THIS WILL OVERRIDE THE -zstep FLAG.\n");
-        printf("\t\t\t\t  -turbo 3: Use logarithmically-spaced zsteps (1,2,4,8,...). THIS WILL OVERRIDE THE -zstep FLAG. \n\n");
+        printf("\t\t\t\t  -turbo 0: (Fast, most accurate) Localise candidates to their exact (r,z) bin location (default setting)\n");
+        printf("\t\t\t\t  -turbo 1: (Faster, less accurate r-bin) Only localise candidates to within \"-chunkwidth\" bins on the frequency spectrum.\n");
+        printf("\t\t\t\t  -turbo 2: (Faster, less accurate r-bin & z-bin) Option 1 and fix -zstep at 2.\n");
+        printf("\t\t\t\t  -turbo 3: (Fastest, least accurate z-bin) Use logarithmically-spaced zsteps (1,2,4,8,...).\n\n");
 
         //printf("\t-candidate_sigma_profile\t\tProfile the candidate sigma function and write the results to candidate_sigma_profile.csv (you probably don't want to do this, default = 0)\n");
         //printf("\t-profile_chi2_logp\t\tProfile the chi2_logp function and write the results to chi2_logp_profile.csv (you probably don't want to do this, default = 0)\n");
