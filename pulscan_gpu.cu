@@ -5,6 +5,10 @@
 #include <math.h>
 #include <chrono>
 
+extern "C" {
+#include "localcdflib.h"
+}
+
 struct candidate{
     float power;
     float logp;
@@ -30,6 +34,63 @@ int compareCandidatesByLogp(const void* a, const void* b){
     } else {
         return 0;
     }
+}
+
+double extended_equiv_gaussian_sigma(double logp)
+/*
+  extended_equiv_gaussian_sigma(double logp):
+      Return the equivalent gaussian sigma corresponding to the 
+          natural log of the cumulative gaussian probability logp.
+          In other words, return x, such that Q(x) = p, where Q(x)
+          is the cumulative normal distribution.  This version uses
+          the rational approximation from Abramowitz and Stegun,
+          eqn 26.2.23.  Using the log(P) as input gives a much
+          extended range.
+*/
+{
+    double t, num, denom;
+
+    t = sqrt(-2.0 * logp);
+    num = 2.515517 + t * (0.802853 + t * 0.010328);
+    denom = 1.0 + t * (1.432788 + t * (0.189269 + t * 0.001308));
+    return t - num / denom;
+}
+
+double equivalent_gaussian_sigma(double logp)
+/* Return the approximate significance in Gaussian sigmas */
+/* corresponding to a natural log probability logp        */
+{
+    double x;
+
+    if (logp < -600.0) {
+        x = extended_equiv_gaussian_sigma(logp);
+    } else {
+        int which, status;
+        double p, q, bound, mean = 0.0, sd = 1.0;
+        q = exp(logp);
+        p = 1.0 - q;
+        which = 2;
+        status = 0;
+        /* Convert to a sigma */
+        cdfnor(&which, &p, &q, &x, &mean, &sd, &status, &bound);
+        if (status) {
+            if (status == -2) {
+                x = 0.0;
+            } else if (status == -3) {
+                x = 38.5;
+            } else {
+                printf("\nError in cdfnor() (candidate_sigma()):\n");
+                printf("   status = %d, bound = %g\n", status, bound);
+                printf("   p = %g, q = %g, x = %g, mean = %g, sd = %g\n\n",
+                       p, q, x, mean, sd);
+                exit(1);
+            }
+        }
+    }
+    if (x < 0.0)
+        return 0.0;
+    else
+        return x;
 }
 
 double __device__ power_to_logp(float chi2, float dof){
@@ -779,7 +840,7 @@ int main(int argc, char* argv[]){
     // write the candidates to a csv file with a header line
     //FILE *csvFile = fopen("gpucandidates.csv", "w");
     FILE *csvFile = fopen(outputFilename, "w");
-    fprintf(csvFile, "logp,r,z,power,numharm\n");
+    fprintf(csvFile, "sigma,logp,r,z,power,numharm\n");
 
     float logpThreshold = -10;
 
@@ -838,7 +899,7 @@ int main(int argc, char* argv[]){
     qsort(finalCandidateArray, candidateCounter, sizeof(candidate), compareCandidatesByLogp);
 
     for (int i = 0; i < candidateCounter; i++){
-        fprintf(csvFile, "%f,%d,%d,%f,%d\n", finalCandidateArray[i].logp, finalCandidateArray[i].r, finalCandidateArray[i].z, finalCandidateArray[i].power, finalCandidateArray[i].numharm);
+        fprintf(csvFile, "%lf, %f,%d,%d,%f,%d\n", equivalent_gaussian_sigma((double) finalCandidateArray[i].logp), finalCandidateArray[i].logp, finalCandidateArray[i].r, finalCandidateArray[i].z, finalCandidateArray[i].power, finalCandidateArray[i].numharm);
     }
 
 

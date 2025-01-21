@@ -20,7 +20,7 @@ cpu:
 gpu:
 	$(GCC) -c localcdflib.c -o localcdflib.o $(CFLAGS)
 	$(NVCC) pulscan_hybrid.cu localcdflib.o -o pulscan_hybrid $(NVCC_HYBRID_FLAGS)
-	$(NVCC) pulscan_gpu.cu -o pulscan_gpu $(NVCC_GPU_FLAGS)
+	$(NVCC) pulscan_gpu.cu localcdflib.o -o pulscan_gpu $(NVCC_GPU_FLAGS)
 
 # Clean up
 clean:
