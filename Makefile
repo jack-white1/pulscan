@@ -5,8 +5,8 @@ GCC = gcc
 NVCC = nvcc
 CFLAGS = -lm -Ofast
 OMP_FLAGS = -fopenmp
-NVCC_GPU_FLAGS = -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math
-NVCC_HYBRID_FLAGS = -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math
+NVCC_GPU_FLAGS = -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math -lcufft
+NVCC_HYBRID_FLAGS = -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math -lcufft
 
 # Default target
 all: gpu cpu
@@ -21,6 +21,7 @@ gpu:
 	$(GCC) -c localcdflib.c -o localcdflib.o $(CFLAGS)
 	$(NVCC) pulscan_hybrid.cu localcdflib.o -o pulscan_hybrid $(NVCC_HYBRID_FLAGS)
 	$(NVCC) pulscan_gpu.cu localcdflib.o -o pulscan_gpu $(NVCC_GPU_FLAGS)
+	$(NVCC) pulscan_gpu_bfloat16.cu localcdflib.o -o pulscan_gpu_bf16 $(NVCC_GPU_FLAGS)
 
 # Clean up
 clean:

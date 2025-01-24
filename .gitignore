@@ -1,6 +1,7 @@
 pulscan
 pulscan_hybrid
 pulscan_gpu
+pulscan_gpu_bf16
 *.pulscand
 *.o
 .vscode
