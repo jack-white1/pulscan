@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <math.h>
 #include <chrono>
+#include <cufft.h>
+#include <cuda_fp16.h>
 
 extern "C" {
 #include "localcdflib.h"
@@ -18,8 +20,8 @@ struct candidate{
 };
 
 typedef struct {
-    float power;
-    int index;
+    half power;
+    uint16_t index;
 } power_index_struct;
 
 
@@ -121,16 +123,26 @@ __global__ void wakeGPUKernel(){
     // so that the first kernel run is not slow
 }
 
-__global__ void separateRealAndImaginaryComponents(float2* rawDataDevice, float* realData, float* imaginaryData, long numComplexFloats){
+__global__ void separateRealAndImaginaryComponents(half2* rawDataDevice, half* realData, half* imaginaryData, long numComplexFloats){
     long globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
     if (globalThreadIndex < numComplexFloats){
-        float2 currentValue = rawDataDevice[globalThreadIndex];
+        half2 currentValue = rawDataDevice[globalThreadIndex];
         realData[globalThreadIndex] = currentValue.x;
         imaginaryData[globalThreadIndex] = currentValue.y;
+
+        // check for inf or nan
+        /*if (isinf((float)realData[globalThreadIndex]) || isnan((float)realData[globalThreadIndex])){
+            printf("realData1[%ld] = %f\n", globalThreadIndex, (float)realData[globalThreadIndex]);
+        }
+        if (isinf((float)imaginaryData[globalThreadIndex]) || isnan((float)imaginaryData[globalThreadIndex])){
+            printf("imaginaryData1[%ld] = %f\n", globalThreadIndex, (float)imaginaryData[globalThreadIndex]);
+        }*/
     }
 }
 
-__global__ void medianOfMediansNormalisation(float* globalArray) {
+
+
+__global__ void medianOfMediansNormalisation(half* globalArray) {
     // HARDCODED FOR PERFORMANCE
     // USE medianOfMediansNormalisationAnyBlockSize() FOR GENERAL USE
 
@@ -145,16 +157,16 @@ __global__ void medianOfMediansNormalisation(float* globalArray) {
 
     // Assumes blockDim.x = 1024
     // TODO: make this work for any blockDim.x
-    __shared__ float medianArray[4096];
-    __shared__ float madArray[4096];
-    __shared__ float normalisedArray[4096];
+    __shared__ half medianArray[4096];
+    __shared__ half madArray[4096];
+    __shared__ half normalisedArray[4096];
 
     //int globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
     int localThreadIndex = threadIdx.x;
     int globalArrayIndex = blockDim.x*blockIdx.x*4+threadIdx.x;
 
-    float median;
-    float mad;
+    half median;
+    half mad;
 
     medianArray[localThreadIndex] = globalArray[globalArrayIndex];
     medianArray[localThreadIndex + 1024] = globalArray[globalArrayIndex + 1024];
@@ -173,7 +185,7 @@ __global__ void medianOfMediansNormalisation(float* globalArray) {
 
     __syncthreads();
 
-    float a,b,c,d,min,max;
+    half a,b,c,d,min,max;
   
 
     for (int upperThreadIndex = 1024; upperThreadIndex > 0; upperThreadIndex >>=2){
@@ -182,9 +194,9 @@ __global__ void medianOfMediansNormalisation(float* globalArray) {
             b = medianArray[localThreadIndex+upperThreadIndex];
             c = medianArray[localThreadIndex+upperThreadIndex*2];
             d = medianArray[localThreadIndex+upperThreadIndex*3];
-            min = fminf(fminf(fminf(a,b),c),d);
-            max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-            medianArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
+            min = __hmin(__hmin(__hmin(a,b),c),d);
+            max = __hmax(__hmax(__hmax(a,b),c),d);
+            medianArray[localThreadIndex] = (a+b+c+d-min-max)*((half)0.5);
         }
         __syncthreads();
     }
@@ -193,10 +205,10 @@ __global__ void medianOfMediansNormalisation(float* globalArray) {
     median = medianArray[0];
     __syncthreads();
 
-    madArray[localThreadIndex] = fabsf(madArray[localThreadIndex] - median);
-    madArray[localThreadIndex + 1024] = fabsf(madArray[localThreadIndex + 1024] - median);
-    madArray[localThreadIndex + 2048] = fabsf(madArray[localThreadIndex + 2048] - median);
-    madArray[localThreadIndex + 3072] = fabsf(madArray[localThreadIndex + 3072] - median);
+    madArray[localThreadIndex] = __habs(madArray[localThreadIndex] - median);
+    madArray[localThreadIndex + 1024] = __habs(madArray[localThreadIndex + 1024] - median);
+    madArray[localThreadIndex + 2048] = __habs(madArray[localThreadIndex + 2048] - median);
+    madArray[localThreadIndex + 3072] = __habs(madArray[localThreadIndex + 3072] - median);
 
     __syncthreads();
     
@@ -206,14 +218,14 @@ __global__ void medianOfMediansNormalisation(float* globalArray) {
             b = madArray[localThreadIndex+upperThreadIndex];
             c = madArray[localThreadIndex+upperThreadIndex*2];
             d = madArray[localThreadIndex+upperThreadIndex*3];
-            min = fminf(fminf(fminf(a,b),c),d);
-            max = fmaxf(fmaxf(fmaxf(a,b),c),d);
-            madArray[localThreadIndex] = (a+b+c+d-min-max)*0.5;
+            min = __hmin(__hmin(__hmin(a,b),c),d);
+            max = __hmax(__hmax(__hmax(a,b),c),d);
+            madArray[localThreadIndex] = (a+b+c+d-min-max)*((half)0.5);
         }
         __syncthreads();
     }
     
-    mad =  madArray[0]*1.4826;
+    mad =  madArray[0]*((half)1.4826);
     __syncthreads();
 
 
@@ -232,12 +244,20 @@ __global__ void medianOfMediansNormalisation(float* globalArray) {
 }
 
 
-__global__ void magnitudeSquared(float* realData, float* imaginaryData, float* magnitudeSquaredArray, long numFloats){
+__global__ void magnitudeSquared(half* realData, half* imaginaryData, half* magnitudeSquaredArray, long numFloats){
     int globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
     if (globalThreadIndex < numFloats){
-        float real = realData[globalThreadIndex];
-        float imaginary = imaginaryData[globalThreadIndex];
+        half real = realData[globalThreadIndex];
+        half imaginary = imaginaryData[globalThreadIndex];
         magnitudeSquaredArray[globalThreadIndex] = real*real + imaginary*imaginary;
+
+
+        // check for inf or nan
+        /*if (isinf((float)magnitudeSquaredArray[globalThreadIndex]) || isnan((float)magnitudeSquaredArray[globalThreadIndex])){
+                printf("magnitudeSquaredArray[%ld] = %f\n", globalThreadIndex, (float)magnitudeSquaredArray[globalThreadIndex]);
+                printf("realData[%ld] = %f\n", globalThreadIndex, (float)realData[globalThreadIndex]);
+                printf("imaginaryData[%ld] = %f\n", globalThreadIndex, (float)imaginaryData[globalThreadIndex]);
+        }*/
     }
 }
 
@@ -251,13 +271,13 @@ __global__ void magnitudeSquared(float* realData, float* imaginaryData, float* m
 //                                     |<--------->|<--------->|<--------->|
 //                                        equal spacing between harmonics
 
-__global__ void decimateHarmonics(float* magnitudeSquaredArray, float* decimatedArray2, float* decimatedArray3, float* decimatedArray4, long numMagnitudes){
+__global__ void decimateHarmonics(half* magnitudeSquaredArray, half* decimatedArray2, half* decimatedArray3, half* decimatedArray4, long numMagnitudes){
     int globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
 
-    float fundamental;
-    float harmonic1a, harmonic1b;
-    float harmonic2a, harmonic2b, harmonic2c;
-    float harmonic3a, harmonic3b, harmonic3c, harmonic3d;
+    half fundamental;
+    half harmonic1a, harmonic1b;
+    half harmonic2a, harmonic2b, harmonic2c;
+    half harmonic3a, harmonic3b, harmonic3c, harmonic3d;
 
     if (globalThreadIndex*2+1 < numMagnitudes){
         fundamental = magnitudeSquaredArray[globalThreadIndex];
@@ -284,12 +304,17 @@ __global__ void decimateHarmonics(float* magnitudeSquaredArray, float* decimated
                                                 +harmonic3a+harmonic3b+harmonic3c+harmonic3d;
     }
 
+    // check if any of the inputs are inf or nan
+    /*if (isinf((float)fundamental) || isnan((float)fundamental)){
+        printf("fundamental[%d] = %f\n", globalThreadIndex, (float)fundamental);
+    }*/
+
 }
 
 // I WANT TO __FORCEINLINE__ THIS FUNCTION BUT APPARENTLY YOU CAN'T INLINE FUNCTIONS WITH A __SYNCTHREADS() IN
-__device__ void searchAndUpdate(float* sumArray, power_index_struct* searchArray, candidate* localCandidateArray, int z, int outputCounter, int localThreadIndex, int globalThreadIndex, int numharm){
+__device__ void searchAndUpdate(half* sumArray, power_index_struct* searchArray, candidate* localCandidateArray, int z, int outputCounter, int localThreadIndex, int globalThreadIndex, int numharm){
     searchArray[localThreadIndex].power = sumArray[localThreadIndex];
-    searchArray[localThreadIndex].index = globalThreadIndex;
+    searchArray[localThreadIndex].index = localThreadIndex;
     for (int stride = blockDim.x / 2; stride>0; stride /= 2){
         if (localThreadIndex < stride){
             if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power){
@@ -299,17 +324,18 @@ __device__ void searchAndUpdate(float* sumArray, power_index_struct* searchArray
         __syncthreads();
     }
     if (localThreadIndex == 0){
-        localCandidateArray[outputCounter].power = searchArray[0].power;
-        localCandidateArray[outputCounter].r = searchArray[0].index;
+        localCandidateArray[outputCounter].power = (half)(searchArray[0].power);
+        localCandidateArray[outputCounter].r = blockIdx.x * blockDim.x + (int) searchArray[0].index;
         localCandidateArray[outputCounter].z = z;
         localCandidateArray[outputCounter].logp = 0.0f;
         localCandidateArray[outputCounter].numharm = numharm;
     }
 }
 
-__global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globalCandidateArray, int numharm, long numFloats, int numCandidatesPerBlock){
-    __shared__ float lookupArray[512];
-    __shared__ float sumArray[256];
+
+__global__ void boxcarFilterArray(half* magnitudeSquaredArray, candidate* globalCandidateArray, int numharm, long numFloats, int numCandidatesPerBlock){
+    __shared__ half lookupArray[512];
+    __shared__ half sumArray[256];
     __shared__ power_index_struct searchArray[256];
     __shared__ candidate localCandidateArray[16]; //oversized, has to be greater than numCandidatesPerBlock
 
@@ -318,6 +344,22 @@ __global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globa
 
     lookupArray[localThreadIndex] = magnitudeSquaredArray[globalThreadIndex];
     lookupArray[localThreadIndex + 256] = magnitudeSquaredArray[globalThreadIndex + 256];
+    if (globalThreadIndex < numFloats) {
+        lookupArray[threadIdx.x] = magnitudeSquaredArray[globalThreadIndex];
+        // check for inf or nan
+        /*if (isinf( (float)magnitudeSquaredArray[globalThreadIndex]) || isnan( (float)magnitudeSquaredArray[globalThreadIndex])){
+            printf("magnitudeSquaredArray[%d] = %f\n", globalThreadIndex, (float)magnitudeSquaredArray[globalThreadIndex]);
+        }*/
+    } else {
+        lookupArray[threadIdx.x] = 0.0f;
+    }
+
+    if (globalThreadIndex + 256 < numFloats) {
+        lookupArray[threadIdx.x + 256] = magnitudeSquaredArray[globalThreadIndex + 256];
+    } else {
+        lookupArray[threadIdx.x + 256] = 0.0f;
+    }
+    
 
     __syncthreads();
 
@@ -403,13 +445,27 @@ __global__ void boxcarFilterArray(float* magnitudeSquaredArray, candidate* globa
 }
 
 
-
-
 __global__ void calculateLogp(candidate* globalCandidateArray, long numCandidates, int numSum){
     int globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
     if (globalThreadIndex < numCandidates){
         double logp = power_to_logp(globalCandidateArray[globalThreadIndex].power,globalCandidateArray[globalThreadIndex].z*numSum*2);
         globalCandidateArray[globalThreadIndex].logp = (float) logp;
+    }
+}
+
+__global__ void convertFP32ArrayToFP16Array(float* inputArray, half* outputArray, long numFloats){
+    int globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
+    if (globalThreadIndex < numFloats){
+        outputArray[globalThreadIndex] = __float2half(inputArray[globalThreadIndex]);
+        // check for inf or nan
+        if (isinf(inputArray[globalThreadIndex]) || isnan(inputArray[globalThreadIndex])){
+            printf("inputArray3[%d] = %f\n", globalThreadIndex, inputArray[globalThreadIndex]);
+            printf("outputArray3[%d] = %f\n", globalThreadIndex, __half2float(outputArray[globalThreadIndex]));
+        }
+        if (isinf(__half2float(outputArray[globalThreadIndex])) || isnan(__half2float(outputArray[globalThreadIndex]))){
+            printf("inputArray4[%d] = %f\n", globalThreadIndex, inputArray[globalThreadIndex]);
+            printf("outputArray4[%d] = %f\n", globalThreadIndex, __half2float(outputArray[globalThreadIndex]));
+        }
     }
 }
 
@@ -450,6 +506,90 @@ void copyDeviceCandidateArrayToHostAndPrint(candidate* deviceArray, long numCand
 #define FLASHING   "\033[5m"
 #define BOLD   "\033[1m"
 
+// (Discard DC kernel definition)
+__global__ void discardDC_kernel(const float* __restrict__ d_in,
+                                 float* __restrict__ d_out,
+                                 int outCount)
+{
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    if (idx < outCount-2) {
+        d_out[idx] = d_in[idx + 2]; 
+    }
+}
+
+
+long readDatAndDiscardDC(const char* filepath, float** d_out)
+{
+    FILE *f = fopen(filepath, "rb");
+    if (!f) {
+        fprintf(stderr, "Failed to open .dat file: %s\n", filepath);
+        return -1;
+    }
+    fseek(f, 0, SEEK_END);
+    long fileSizeBytes = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    long N = fileSizeBytes / sizeof(float);
+    if (N < 2) {
+        fprintf(stderr, "Not enough data in .dat file.\n");
+        fclose(f);
+        return -1;
+    }
+
+    // Optionally align down to multiple of 8192 if desired:
+    // N -= (N % 8192);
+
+    float* h_timeData = (float*)malloc(N*sizeof(float));
+    size_t itemsRead = fread(h_timeData, sizeof(float), N, f);
+    fclose(f);
+    if (itemsRead != (size_t)N) {
+        fprintf(stderr, "Error reading .dat: only %zu of %ld floats read\n",
+                itemsRead, N);
+        free(h_timeData);
+        return -1;
+    }
+
+    printf("N+2 = %ld\n", N+2);
+
+    float* d_timeData = NULL;
+    cudaMalloc((void**)&d_timeData, N*sizeof(float));
+    cudaMemcpy(d_timeData, h_timeData, N*sizeof(float), cudaMemcpyHostToDevice);
+    free(h_timeData);
+
+    float* d_freqTemp = NULL; 
+    cudaMalloc((void**)&d_freqTemp, (N+2)*sizeof(float)); // R2C => N+2 floats
+
+    cufftHandle plan;
+    cufftPlan1d(&plan, (int)N, CUFFT_R2C, 1);
+    cufftResult res = cufftExecR2C(plan, (cufftReal*)d_timeData, (cufftComplex*)d_freqTemp);
+    cufftDestroy(plan);
+    cudaFree(d_timeData);
+    if (res != CUFFT_SUCCESS) {
+        fprintf(stderr, "cufftExecR2C failed.\n");
+        cudaFree(d_freqTemp);
+        return -1;
+    }
+
+
+    // Allocate final array for "no-DC" => length N floats
+    float* d_freqNoDC = NULL;
+    cudaMalloc((void**)&d_freqNoDC, N*sizeof(float));
+
+    int blockSize = 256;
+    int gridSize = (int)((N + blockSize - 1)/blockSize);
+    discardDC_kernel<<<gridSize, blockSize>>>(d_freqTemp, d_freqNoDC, (int)N);
+
+    cudaFree(d_freqTemp);
+
+    *d_out = d_freqNoDC;
+
+
+
+    return N; // the final array has N floats (i.e. (N/2) complex bins)
+}
+
+
+// Pulscan ASCII
 const char* pulscan_frame = 
 "    .          .     .     *        .   .   .     .\n"
 "         " BOLD "___________      . __" RESET " .  .   *  .   .  .  .     .\n"
@@ -458,11 +598,9 @@ const char* pulscan_frame =
 " .          " BOLD "_  ____/ /_/ / (__  ) /__/ /_/ / / / /" RESET " .  *     . \n"
 "       .    " BOLD "/_/ *  \\__,_/_/____/\\___/\\__,_/_/ /_/" RESET "    \n"
 "    *    +     .     .     . +     .     +   .      *   +\n"
-
 "  J. White, K. Adámek, J. Roy, S. Ransom, W. Armour  2023\n\n";
 
 int main(int argc, char* argv[]){
-    int debug = 0;
     printf("%s\n", pulscan_frame);
 
     // start high resolution timer to measure gpu initialisation time using chrono
@@ -483,61 +621,115 @@ int main(int argc, char* argv[]){
         printf("Please provide the input file path as a command line argument.\n");
         return 1;
     }
-
     const char* filepath = argv[1];
-
-    // Check filepath ends with ".fft"
-    if (strlen(filepath) < 5 || strcmp(filepath + strlen(filepath) - 4, ".fft") != 0) {
-        printf("Input file must be a .fft file.\n");
+    
+    // Detect file extension
+    size_t filepathLen = strlen(filepath);
+    bool isFFT = false, isDAT = false;
+    if (filepathLen > 4) {
+        const char* ext = filepath + (filepathLen - 4);
+        if (strcmp(ext, ".fft") == 0) {
+            isFFT = true;
+        } else if (strcmp(ext, ".dat") == 0) {
+            isDAT = true;
+        }
+    }
+    if (!isFFT && !isDAT) {
+        printf("Error: input file must end with .fft or .dat\n");
         return 1;
     }
 
-    FILE *f = fopen(filepath, "rb");
+    float* rawDataDevice = NULL;
+    size_t numFloats = 0; // total floats in rawDataDevice
 
-    // Determine the size of the file in bytes
-    fseek(f, 0, SEEK_END);
-    size_t filesize = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    
-    // Read the file into CPU memory
-    size_t numFloats = filesize / sizeof(float);
+    if (isFFT) {
+        FILE *f = fopen(filepath, "rb");
+        if (!f) {
+            fprintf(stderr, "Failed to open .fft file: %s\n", filepath);
+            return 1;
+        }
 
-    // Cap the filesize at the nearest lower factor of 8192 for compatibility later on
-    numFloats = numFloats - (numFloats % 8192);
-    float* rawData = (float*) malloc(sizeof(float) * numFloats);
-    size_t itemsRead = fread(rawData, sizeof(float), numFloats, f);
-    if (itemsRead != numFloats) {
-        // Handle error: not all items were read
-        fprintf(stderr, "Error reading file: only %zu out of %zu items read\n", itemsRead, numFloats);
-        // You might want to take additional action here, like exiting the function or the program
+        fseek(f, 0, SEEK_END);
+        size_t filesize = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        
+        numFloats = filesize / sizeof(float);
+
+        // Cap the filesize at the nearest lower factor of 8192
+        numFloats = numFloats - (numFloats % 8192);
+
+        float* rawDataHost = (float*) malloc(sizeof(float)*numFloats);
+        size_t itemsRead = fread(rawDataHost, sizeof(float), numFloats, f);
+        fclose(f);
+        if (itemsRead != numFloats) {
+            fprintf(stderr, "Error reading .fft file: only %zu of %zu items read\n",
+                    itemsRead, numFloats);
+        }
+        end_chrono = std::chrono::high_resolution_clock::now();
+        duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_chrono - start_chrono);
+        printf("Reading file took:                      %f ms\n", (float)duration.count());
+
+        // Copy raw .fft data to GPU
+        cudaEvent_t start, stop;
+        cudaEventCreate(&start);
+        cudaEventCreate(&stop);
+        cudaEventRecord(start);
+
+        cudaMalloc((void**)&rawDataDevice, sizeof(float)*numFloats);
+        cudaMemcpy(rawDataDevice, rawDataHost, sizeof(float)*numFloats, cudaMemcpyHostToDevice);
+
+        cudaEventRecord(stop);
+        cudaEventSynchronize(stop);
+        float milliseconds = 0;
+        cudaEventElapsedTime(&milliseconds, start, stop);
+        printf("Copying data to GPU took:               %f ms\n", milliseconds);
+
+        free(rawDataHost);
+
+    } else {
+
+        // read the .dat file, run R2C, discard DC => get an array of length N floats
+        // This also includes the time to copy to GPU, so let's time it
+        cudaEvent_t start, stop;
+        cudaEventCreate(&start);
+        cudaEventCreate(&stop);
+        cudaEventRecord(start);
+
+        auto start_chrono = std::chrono::high_resolution_clock::now();
+
+        long N = readDatAndDiscardDC(filepath, &rawDataDevice);
+
+        auto end_chrono = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_chrono - start_chrono);
+        printf("Reading file took:                      %f ms\n", (float)duration.count());
+
+        if (N <= 0) {
+            fprintf(stderr, "readDatAndDiscardDC failed.\n");
+            return 1;
+        }
+        numFloats = (size_t)N;  // final # of floats in rawDataDevice
+
+        // Cap the floats at the nearest lower factor of 8192
+        numFloats = numFloats - (numFloats % 8192);
+
+        cudaEventRecord(stop);
+        cudaEventSynchronize(stop);
+        float milliseconds = 0;
+        cudaEventElapsedTime(&milliseconds, start, stop);
+        printf("Performing R2C & discarding DC took:    %f ms\n", milliseconds);
     }
-    fclose(f);
 
-    // stop timing
-    end_chrono = std::chrono::high_resolution_clock::now();
-    duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_chrono - start_chrono);
-    printf("Reading file took:                      %f ms\n", (float)duration.count());
+    half* rawDataDevice_fp16;
+    cudaMalloc((void**)&rawDataDevice_fp16, sizeof(half)*numFloats);
 
-    // start GPU timing
+    // Now we have:
+    //   rawDataDevice: interleaved complex floats
+    //   numFloats: total floats in that array
+    //
+    // The remainder of the pipeline is unchanged.
+
+    // Start measuring GPU pipeline
     cudaEvent_t start, stop, overallGPUStart, overallGPUStop;
-    // start timing
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    cudaEventRecord(start);
-
-    // Allocate a suitable array on the GPU, copy raw data across
-    float* rawDataDevice;
-    cudaMalloc((void**)&rawDataDevice, sizeof(float) * numFloats);
-    cudaMemcpy(rawDataDevice, rawData, sizeof(float) * numFloats, cudaMemcpyHostToDevice);
-
-    // stop timing
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
-    float milliseconds = 0;
-    cudaEventElapsedTime(&milliseconds, start, stop);
-    printf("Copying data to GPU took:               %f ms\n", milliseconds);
-
-    // start timing
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     
@@ -546,140 +738,109 @@ int main(int argc, char* argv[]){
     cudaEventCreate(&overallGPUStop);
     cudaEventRecord(overallGPUStart);
 
-    int numMagnitudes = numFloats/2;
+    // convert rawDataDevice to half
+    int numThreadsConvert = 256;
+    int numBlocksConvert = (numFloats + numThreadsConvert - 1)/ numThreadsConvert;
 
-    // Separate the interleaved real and imaginary parts as the raw data
-    // is in the format [[real,imaginary], [real,imaginary]]
-    // this is basically a transpose from a 2xN to an Nx2 array
-    float* realDataDevice;
-    float* imaginaryDataDevice;
-    cudaMalloc((void**)&realDataDevice, sizeof(float)*numMagnitudes);
-    cudaMalloc((void**)&imaginaryDataDevice, sizeof(float)*numMagnitudes);
+    convertFP32ArrayToFP16Array<<<numBlocksConvert, numThreadsConvert>>>(rawDataDevice, rawDataDevice_fp16, numFloats);
+
+    int numMagnitudes = numFloats/2;  // each complex bin has 2 floats
+    printf("Number of magnitude bins:               %d\n", numMagnitudes);
+
+    // 1) Separate real & imaginary
+    half* realDataDevice;
+    half* imaginaryDataDevice;
+    cudaMalloc((void**)&realDataDevice, sizeof(half)*numMagnitudes);
+    cudaMalloc((void**)&imaginaryDataDevice, sizeof(half)*numMagnitudes);
 
     int numThreadsSeparate = 256;
     int numBlocksSeparate = (numMagnitudes + numThreadsSeparate - 1)/ numThreadsSeparate;
-    if (debug == 1) {
-        printf("Calling separateRealAndImaginaryComponents with %d threads per block and %d blocks\n", numThreadsSeparate, numBlocksSeparate);
-    }
-
     cudaEventRecord(start);
-    separateRealAndImaginaryComponents<<<numBlocksSeparate, numThreadsSeparate>>>((float2*)rawDataDevice, realDataDevice, imaginaryDataDevice, numMagnitudes);
-    // stop timing
+    separateRealAndImaginaryComponents<<<numBlocksSeparate, numThreadsSeparate>>>(
+        (half2*)rawDataDevice_fp16, realDataDevice, imaginaryDataDevice, numMagnitudes);
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
-    milliseconds = 0;
+    float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
     printf("Separating complex components took:     %f ms\n", milliseconds);
 
-
-    // start timing
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
+    // 2) Normalise real and imaginary parts
     
-
-    // Normalise the real and imaginary parts
-
+    int numThreadsNormalise = 1024; // must be 1024 for kernel
     int numMagnitudesPerThreadNormalise = 4;
-    int numThreadsNormalise = 1024; // DO NOT CHANGE THIS, TODO: make it changeable
-    int numBlocksNormalise = ((numMagnitudes/numMagnitudesPerThreadNormalise) + numThreadsNormalise - 1)/ numThreadsNormalise;
-    //printf("numBlocksNormalise: %d\n", numBlocksNormalise);
-    //printf("numMagnitudes: %d\n", numMagnitudes);
-    
-    if (debug == 1) {
-        printf("Calling medianOfMediansNormalisation with %d blocks and %d threads per block\n", numBlocksNormalise, numThreadsNormalise);
-    }
+    int numBlocksNormalise = ((numMagnitudes/numMagnitudesPerThreadNormalise)
+                              + numThreadsNormalise - 1)/ numThreadsNormalise;
+
     cudaEventRecord(start);
     medianOfMediansNormalisation<<<numBlocksNormalise, numThreadsNormalise>>>(realDataDevice);
     medianOfMediansNormalisation<<<numBlocksNormalise, numThreadsNormalise>>>(imaginaryDataDevice);
     cudaDeviceSynchronize();
 
-    //copyDeviceArrayToHostAndPrint(realDataDevice, numMagnitudes);
-    
-    // stop timing
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
     printf("Normalisation took:                     %f ms\n", milliseconds);
 
-    // start timing
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
+    // 3) Magnitude
     
-
-    // Take the magnitude of the complex numbers
-    float* magnitudeSquaredArray;
-    cudaMalloc((void**)&magnitudeSquaredArray, sizeof(float)*numMagnitudes);
+    half* magnitudeSquaredArray;
+    cudaMalloc((void**)&magnitudeSquaredArray, sizeof(half)*numMagnitudes);
 
     int numThreadsMagnitude = 1024;
     int numBlocksMagnitude = (numMagnitudes + numThreadsMagnitude - 1)/ numThreadsMagnitude;
-    
-    if (debug == 1) {
-        printf("Calling magnitudeSquared with %d blocks and %d threads per block\n", numBlocksMagnitude, numThreadsMagnitude);
-    }
-    cudaEventRecord(start);
-    magnitudeSquared<<<numBlocksMagnitude, numThreadsMagnitude>>>(realDataDevice, imaginaryDataDevice, magnitudeSquaredArray, numMagnitudes);
-    cudaDeviceSynchronize();
-    
-    //copyDeviceArrayToHostAndPrint(magnitudeSquaredArray, numMagnitudes);
-    //copyDeviceArrayToHostAndSaveToFile(magnitudeSquaredArray, numMagnitudes, "magnitudeSquaredArray.csv");
 
-    // stop timing
+    cudaEventRecord(start);
+    magnitudeSquared<<<numBlocksMagnitude, numThreadsMagnitude>>>(
+        realDataDevice, imaginaryDataDevice, magnitudeSquaredArray, numMagnitudes);
+    cudaDeviceSynchronize();
+
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
     printf("Magnitude took:                         %f ms\n", milliseconds);
 
-    // start timing
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
+    // 4) Decimate for harmonic summation
     
-
-    float* decimatedArrayBy2;
-    float* decimatedArrayBy3;
-    float* decimatedArrayBy4;
-    cudaMalloc((void**)&decimatedArrayBy2, sizeof(float)*numMagnitudes/2);
-    cudaMalloc((void**)&decimatedArrayBy3, sizeof(float)*numMagnitudes/3);
-    cudaMalloc((void**)&decimatedArrayBy4, sizeof(float)*numMagnitudes/4);
+    half* decimatedArrayBy2;
+    half* decimatedArrayBy3;
+    half* decimatedArrayBy4;
+    cudaMalloc((void**)&decimatedArrayBy2, sizeof(half)* (numMagnitudes/2));
+    cudaMalloc((void**)&decimatedArrayBy3, sizeof(half)* (numMagnitudes/3));
+    cudaMalloc((void**)&decimatedArrayBy4, sizeof(half)* (numMagnitudes/4));
 
     int numThreadsDecimate = 256;
     int numBlocksDecimate = (numMagnitudes/2 + numThreadsDecimate - 1)/ numThreadsDecimate;
-
-
-    if (debug == 1) {
-        printf("Calling decimateHarmonics with %d blocks and %d threads per block\n", numBlocksDecimate, numThreadsDecimate);
-    }
     cudaEventRecord(start);
-    decimateHarmonics<<<numBlocksDecimate, numThreadsDecimate>>>(magnitudeSquaredArray, decimatedArrayBy2, decimatedArrayBy3, decimatedArrayBy4, numMagnitudes);
+    decimateHarmonics<<<numBlocksDecimate, numThreadsDecimate>>>(
+        magnitudeSquaredArray, decimatedArrayBy2, decimatedArrayBy3, decimatedArrayBy4, 
+        numMagnitudes);
     cudaDeviceSynchronize();
 
-    //copyDeviceArrayToHostAndSaveToFile(decimatedArrayBy4, numMagnitudes/4, "decimatedArrayBy4.csv");
-    
-    // stop timing
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
     printf("Decimation took:                        %f ms\n", milliseconds);
 
-    // start timing
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    
+    long numFloats2 = numMagnitudes/2;
+    numFloats2 = numFloats2 - (numFloats2 % 8192);
 
-    cudaStream_t stream1, stream2, stream3, stream4;
+    long numFloats3 = numMagnitudes/3;
+    numFloats3 = numFloats3 - (numFloats3 % 8192);
 
-    cudaStreamCreate(&stream1);
-    cudaStreamCreate(&stream2);
-    cudaStreamCreate(&stream3);
-    cudaStreamCreate(&stream4);
+    long numFloats4 = numMagnitudes/4;
+    numFloats4 = numFloats4 - (numFloats4 % 8192);
+
+
+    // 5) Boxcar filtering on each harmonic array (1,2,3,4)
 
     int numThreadsBoxcar = 256;
     int numBlocksBoxcar1 = (numMagnitudes + numThreadsBoxcar - 1)/ numThreadsBoxcar;
-    int numBlocksBoxcar2 = (numMagnitudes/2 + numThreadsBoxcar - 1)/ numThreadsBoxcar;
-    int numBlocksBoxcar3 = (numMagnitudes/3 + numThreadsBoxcar - 1)/ numThreadsBoxcar;
-    int numBlocksBoxcar4 = (numMagnitudes/4 + numThreadsBoxcar - 1)/ numThreadsBoxcar;
+    int numBlocksBoxcar2 = ((numFloats2) + numThreadsBoxcar - 1)/ numThreadsBoxcar;
+    int numBlocksBoxcar3 = ((numFloats3) + numThreadsBoxcar - 1)/ numThreadsBoxcar;
+    int numBlocksBoxcar4 = ((numFloats4) + numThreadsBoxcar - 1)/ numThreadsBoxcar;
 
     candidate* globalCandidateArray1;
     candidate* globalCandidateArray2;
@@ -688,11 +849,10 @@ int main(int argc, char* argv[]){
 
     int zmax = 256;
     int numCandidatesPerBlock = 1;
-
     int i = 1;
     while (i <= zmax){
         i *= 2;
-        numCandidatesPerBlock += 1;
+        numCandidatesPerBlock++;
     }
 
     cudaMalloc((void**)&globalCandidateArray1, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar1);
@@ -704,58 +864,49 @@ int main(int argc, char* argv[]){
     cudaMemset(globalCandidateArray2, 0, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar2);
     cudaMemset(globalCandidateArray3, 0, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar3);
     cudaMemset(globalCandidateArray4, 0, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar4);
-    
-    if (debug == 1) {
-        printf("Calling boxcarFilterArray with %d blocks and %d threads per block\n", numBlocksBoxcar1, numThreadsBoxcar);
-        printf("Calling boxcarFilterArray with %d blocks and %d threads per block\n", numBlocksBoxcar2, numThreadsBoxcar);
-        printf("Calling boxcarFilterArray with %d blocks and %d threads per block\n", numBlocksBoxcar3, numThreadsBoxcar);
-        printf("Calling boxcarFilterArray with %d blocks and %d threads per block\n", numBlocksBoxcar4, numThreadsBoxcar);
-    }
-
     cudaEventRecord(start);
-    boxcarFilterArray<<<numBlocksBoxcar1, numThreadsBoxcar, 0>>>(magnitudeSquaredArray, globalCandidateArray1, 1, numMagnitudes, numCandidatesPerBlock);
-    boxcarFilterArray<<<numBlocksBoxcar2, numThreadsBoxcar, 0>>>(decimatedArrayBy2, globalCandidateArray2, 2, numMagnitudes/2, numCandidatesPerBlock);
-    boxcarFilterArray<<<numBlocksBoxcar3, numThreadsBoxcar, 0>>>(decimatedArrayBy3, globalCandidateArray3, 3, numMagnitudes/3, numCandidatesPerBlock);
-    boxcarFilterArray<<<numBlocksBoxcar4, numThreadsBoxcar, 0>>>(decimatedArrayBy4, globalCandidateArray4, 4, numMagnitudes/4, numCandidatesPerBlock);
+
+    // Launch boxcar for each harmonic array
+    boxcarFilterArray<<<numBlocksBoxcar1, numThreadsBoxcar, 0>>>(
+        magnitudeSquaredArray, globalCandidateArray1, 1, numMagnitudes, numCandidatesPerBlock);
+    boxcarFilterArray<<<numBlocksBoxcar2, numThreadsBoxcar, 0>>>(
+        decimatedArrayBy2, globalCandidateArray2, 2, numMagnitudes/2, numCandidatesPerBlock);
+    boxcarFilterArray<<<numBlocksBoxcar3, numThreadsBoxcar, 0>>>(
+        decimatedArrayBy3, globalCandidateArray3, 3, numMagnitudes/3, numCandidatesPerBlock);
+    boxcarFilterArray<<<numBlocksBoxcar4, numThreadsBoxcar, 0>>>(
+        decimatedArrayBy4, globalCandidateArray4, 4, numMagnitudes/4, numCandidatesPerBlock);
     cudaDeviceSynchronize();
 
-    //copyDeviceCandidateArrayToHostAndPrint(globalCandidateArray4,numCandidatesPerBlock*numBlocksBoxcar4);
-
-    // stop timing
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
     printf("Boxcar filtering took:                  %f ms\n", milliseconds);
 
-    // start timing
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
+    // 6) Calculate logp for each candidate
     
-
     int numThreadsLogp = 256;
-    int numBlocksLogp1 = (numBlocksBoxcar1*numCandidatesPerBlock + numThreadsLogp - 1)/ numThreadsLogp;
-    int numBlocksLogp2 = (numBlocksBoxcar2*numCandidatesPerBlock + numThreadsLogp - 1)/ numThreadsLogp;
-    int numBlocksLogp3 = (numBlocksBoxcar3*numCandidatesPerBlock + numThreadsLogp - 1)/ numThreadsLogp;
-    int numBlocksLogp4 = (numBlocksBoxcar4*numCandidatesPerBlock + numThreadsLogp - 1)/ numThreadsLogp;
+    int totalCands1 = numBlocksBoxcar1 * numCandidatesPerBlock;
+    int totalCands2 = numBlocksBoxcar2 * numCandidatesPerBlock;
+    int totalCands3 = numBlocksBoxcar3 * numCandidatesPerBlock;
+    int totalCands4 = numBlocksBoxcar4 * numCandidatesPerBlock;
 
-    if (debug == 1) {
-        printf("Calling calculateLogp with %d blocks and %d threads per block\n", numBlocksLogp1, numThreadsLogp);
-        printf("Calling calculateLogp with %d blocks and %d threads per block\n", numBlocksLogp2, numThreadsLogp);
-        printf("Calling calculateLogp with %d blocks and %d threads per block\n", numBlocksLogp3, numThreadsLogp);
-        printf("Calling calculateLogp with %d blocks and %d threads per block\n", numBlocksLogp4, numThreadsLogp);
-    }
+    int numBlocksLogp1 = (totalCands1 + numThreadsLogp - 1)/ numThreadsLogp;
+    int numBlocksLogp2 = (totalCands2 + numThreadsLogp - 1)/ numThreadsLogp;
+    int numBlocksLogp3 = (totalCands3 + numThreadsLogp - 1)/ numThreadsLogp;
+    int numBlocksLogp4 = (totalCands4 + numThreadsLogp - 1)/ numThreadsLogp;
 
     cudaEventRecord(start);
-    calculateLogp<<<numBlocksLogp1, numThreadsLogp, 0>>>(globalCandidateArray1, numBlocksBoxcar1*numCandidatesPerBlock, 1);
-    calculateLogp<<<numBlocksLogp2, numThreadsLogp, 0>>>(globalCandidateArray2, numBlocksBoxcar2*numCandidatesPerBlock, 3);
-    calculateLogp<<<numBlocksLogp3, numThreadsLogp, 0>>>(globalCandidateArray3, numBlocksBoxcar3*numCandidatesPerBlock, 6);
-    calculateLogp<<<numBlocksLogp4, numThreadsLogp, 0>>>(globalCandidateArray4, numBlocksBoxcar4*numCandidatesPerBlock, 10);
+    calculateLogp<<<numBlocksLogp1, numThreadsLogp, 0>>>(
+        globalCandidateArray1, totalCands1, 1);
+    calculateLogp<<<numBlocksLogp2, numThreadsLogp, 0>>>(
+        globalCandidateArray2, totalCands2, 3);
+    calculateLogp<<<numBlocksLogp3, numThreadsLogp, 0>>>(
+        globalCandidateArray3, totalCands3, 6);
+    calculateLogp<<<numBlocksLogp4, numThreadsLogp, 0>>>(
+        globalCandidateArray4, totalCands4, 10);
     cudaDeviceSynchronize();
 
-    //copyDeviceCandidateArrayToHostAndPrint(globalCandidateArray1, numCandidatesPerBlock*numBlocksBoxcar1);
-    
-    // stop timing
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     milliseconds = 0;
@@ -769,113 +920,76 @@ int main(int argc, char* argv[]){
     cudaEventElapsedTime(&milliseconds, overallGPUStart, overallGPUStop);
     printf("Overall GPU time taken:                 %f ms\n", milliseconds);
 
-    // start chrono timer for writing output file
-    start_chrono = std::chrono::high_resolution_clock::now();
+    // ----------------------------------------------------
+    // Write output file
+    // ----------------------------------------------------
+    auto write_start = std::chrono::high_resolution_clock::now();
 
-    candidate* hostCandidateArray1;
-    candidate* hostCandidateArray2;
-    candidate* hostCandidateArray3;
-    candidate* hostCandidateArray4;
+    candidate* hostCandidateArray1 = (candidate*)malloc(sizeof(candidate)*totalCands1);
+    candidate* hostCandidateArray2 = (candidate*)malloc(sizeof(candidate)*totalCands2);
+    candidate* hostCandidateArray3 = (candidate*)malloc(sizeof(candidate)*totalCands3);
+    candidate* hostCandidateArray4 = (candidate*)malloc(sizeof(candidate)*totalCands4);
 
-    hostCandidateArray1 = (candidate*)malloc(sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar1);
-    hostCandidateArray2 = (candidate*)malloc(sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar2);
-    hostCandidateArray3 = (candidate*)malloc(sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar3);
-    hostCandidateArray4 = (candidate*)malloc(sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar4);
+    cudaMemcpy(hostCandidateArray1, globalCandidateArray1, sizeof(candidate)*totalCands1, cudaMemcpyDeviceToHost);
+    cudaMemcpy(hostCandidateArray2, globalCandidateArray2, sizeof(candidate)*totalCands2, cudaMemcpyDeviceToHost);
+    cudaMemcpy(hostCandidateArray3, globalCandidateArray3, sizeof(candidate)*totalCands3, cudaMemcpyDeviceToHost);
+    cudaMemcpy(hostCandidateArray4, globalCandidateArray4, sizeof(candidate)*totalCands4, cudaMemcpyDeviceToHost);
 
-    cudaMemcpy(hostCandidateArray1, globalCandidateArray1, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar1, cudaMemcpyDeviceToHost);
-    cudaMemcpy(hostCandidateArray2, globalCandidateArray2, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar2, cudaMemcpyDeviceToHost);
-    cudaMemcpy(hostCandidateArray3, globalCandidateArray3, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar3, cudaMemcpyDeviceToHost);
-    cudaMemcpy(hostCandidateArray4, globalCandidateArray4, sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar4, cudaMemcpyDeviceToHost);
-
+    // Build output filename
     char outputFilename[256];
-    size_t filepathLen = strlen(filepath);
-    
-    if (filepathLen > 4 && strcmp(filepath + filepathLen - 4, ".fft") == 0) {
-        // Copy the filepath without the last 4 characters
-        snprintf(outputFilename, sizeof(outputFilename), "%.*s", (int)(filepathLen - 4), filepath);
-    } else {
-        // If the file doesn't end with .fft, just copy the whole filepath
-        snprintf(outputFilename, sizeof(outputFilename), "%s", filepath);
+    snprintf(outputFilename, sizeof(outputFilename), "%s", filepath);
+    if (filepathLen > 4) {
+        // remove the .fft or .dat suffix
+        outputFilename[filepathLen - 4] = '\0';
     }
-    
-    // Append the new extension
     strncat(outputFilename, ".gpucand", sizeof(outputFilename) - strlen(outputFilename) - 1);
 
-    // write the candidates to a csv file with a header line
-    //FILE *csvFile = fopen("gpucandidates.csv", "w");
     FILE *csvFile = fopen(outputFilename, "w");
     fprintf(csvFile, "sigma,logp,r,z,power,numharm\n");
 
     float logpThreshold = -10;
 
+    // Gather final candidates
+    int totalSize = totalCands1 + totalCands2 + totalCands3 + totalCands4;
+    candidate* finalCandidateArray = (candidate*)malloc(sizeof(candidate)*totalSize);
 
-
-    candidate* finalCandidateArray = (candidate*)malloc(sizeof(candidate)*numCandidatesPerBlock*numBlocksBoxcar1+numCandidatesPerBlock*numBlocksBoxcar2+numCandidatesPerBlock*numBlocksBoxcar3+numCandidatesPerBlock*numBlocksBoxcar4);
     int candidateCounter = 0;
-
-    for (int i = 0; i < numBlocksBoxcar1*numCandidatesPerBlock; i++){
-        if (hostCandidateArray1[i].logp < logpThreshold){
-            if (hostCandidateArray1[i].r != 0){
-                if (hostCandidateArray1[i].z != 0){
-                    finalCandidateArray[candidateCounter] = hostCandidateArray1[i];
-                    candidateCounter+=1;
-                }
-            }
+    #define ADD_CANDIDATES_FROM(Array, Count) \
+        for (int i = 0; i < (Count); i++){ \
+            if ((Array)[i].logp < logpThreshold && (Array)[i].r != 0 && (Array)[i].z != 0) { \
+                finalCandidateArray[candidateCounter++] = (Array)[i]; \
+            } \
         }
-    }
-    
-    for (int i = 0; i < numBlocksBoxcar2*numCandidatesPerBlock; i++){
-        if (hostCandidateArray2[i].logp < logpThreshold){
-            if (hostCandidateArray2[i].r != 0){
-                if (hostCandidateArray2[i].z != 0){
-                    finalCandidateArray[candidateCounter] = hostCandidateArray2[i];
-                    candidateCounter+=1;
-                }
-            }
-        }
-    }
 
-    for (int i = 0; i < numBlocksBoxcar3*numCandidatesPerBlock; i++){
-        if (hostCandidateArray3[i].logp < logpThreshold){
-            if (hostCandidateArray3[i].r != 0){
-                if (hostCandidateArray3[i].z != 0){
-                    finalCandidateArray[candidateCounter] = hostCandidateArray3[i];
-                    candidateCounter+=1;
-                }
-            }
-        }
-    }
+    ADD_CANDIDATES_FROM(hostCandidateArray1, totalCands1);
+    ADD_CANDIDATES_FROM(hostCandidateArray2, totalCands2);
+    ADD_CANDIDATES_FROM(hostCandidateArray3, totalCands3);
+    ADD_CANDIDATES_FROM(hostCandidateArray4, totalCands4);
 
-    
-    for (int i = 0; i < numBlocksBoxcar4*numCandidatesPerBlock; i++){
-        if (hostCandidateArray4[i].logp < logpThreshold){
-            if (hostCandidateArray4[i].r != 0){
-                if (hostCandidateArray4[i].z != 0){
-                    finalCandidateArray[candidateCounter] = hostCandidateArray4[i];
-                    candidateCounter+=1;
-                }
-            }
-        }
-    }
-    
-
-    // use quicksort to sort the final candidate array by logp (ascending order)
+    // sort by logp ascending
     qsort(finalCandidateArray, candidateCounter, sizeof(candidate), compareCandidatesByLogp);
 
+    // write out
     for (int i = 0; i < candidateCounter; i++){
-        fprintf(csvFile, "%lf, %f,%d,%d,%f,%d\n", equivalent_gaussian_sigma((double) finalCandidateArray[i].logp), finalCandidateArray[i].logp, finalCandidateArray[i].r, finalCandidateArray[i].z, finalCandidateArray[i].power, finalCandidateArray[i].numharm);
+        double sig = equivalent_gaussian_sigma((double) finalCandidateArray[i].logp);
+        fprintf(csvFile, "%lf,%f,%d,%d,%f,%d\n",
+                sig, finalCandidateArray[i].logp,
+                finalCandidateArray[i].r, finalCandidateArray[i].z,
+                finalCandidateArray[i].power, finalCandidateArray[i].numharm);
     }
-
-
     fclose(csvFile);
 
-    // stop chrono timer for writing output file
-    end_chrono = std::chrono::high_resolution_clock::now();
-    duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_chrono - start_chrono);
+    auto write_end = std::chrono::high_resolution_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::milliseconds>(write_end - write_start);
     printf("Writing output file took:               %f ms\n", (float)duration.count());
 
+    // Cleanup
+    free(hostCandidateArray1);
+    free(hostCandidateArray2);
+    free(hostCandidateArray3);
+    free(hostCandidateArray4);
+    free(finalCandidateArray);
 
-    free(rawData);
     cudaFree(rawDataDevice);
     cudaFree(realDataDevice);
     cudaFree(imaginaryDataDevice);
@@ -888,7 +1002,6 @@ int main(int argc, char* argv[]){
     cudaFree(globalCandidateArray3);
     cudaFree(globalCandidateArray4);
 
-    // check last cuda error
     cudaError_t error = cudaGetLastError();
     if (error != cudaSuccess){
         printf("CUDA error: %s\n", cudaGetErrorString(error));

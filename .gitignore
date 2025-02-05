@@ -2,6 +2,7 @@ pulscan
 pulscan_hybrid
 pulscan_gpu
 pulscan_gpu_bf16
+pulscan_gpu_fp16
 *.pulscand
 *.o
 .vscode
@@ -13,3 +14,4 @@ plot_timings.py
 *.png
 pulscan_gpu_power_loop
 pulscan_dft
+*.ncu-rep
