@@ -5,7 +5,7 @@ GCC = gcc
 NVCC = nvcc
 CFLAGS = -lm -Ofast
 OMP_FLAGS = -fopenmp
-NVCC_GPU_FLAGS = -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math -lcufft -lineinfo
+NVCC_GPU_FLAGS = -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math -lcufft -lineinfo -arch=sm_90
 NVCC_HYBRID_FLAGS = -lm -Xcompiler "-fopenmp -Ofast" --use_fast_math -lcufft
 
 # Default target

@@ -298,7 +298,7 @@ __global__ void decimateHarmonics(__nv_bfloat16* magnitudeSquaredArray, __nv_bfl
 }
 
 // I WANT TO __FORCEINLINE__ THIS FUNCTION BUT APPARENTLY YOU CAN'T INLINE FUNCTIONS WITH A __SYNCTHREADS() IN
-__device__ void searchAndUpdate(float* sumArray, power_index_struct* searchArray, candidate* localCandidateArray, int z, int outputCounter, int localThreadIndex, int globalThreadIndex, int numharm){
+__device__ void searchAndUpdate(__nv_bfloat16* sumArray, power_index_struct* searchArray, candidate* localCandidateArray, int z, int outputCounter, int localThreadIndex, int globalThreadIndex, int numharm){
     searchArray[localThreadIndex].power = sumArray[localThreadIndex];
     searchArray[localThreadIndex].index = localThreadIndex;
     for (int stride = blockDim.x / 2; stride>0; stride /= 2){
@@ -320,16 +320,16 @@ __device__ void searchAndUpdate(float* sumArray, power_index_struct* searchArray
 
 
 __global__ void boxcarFilterArray(__nv_bfloat16* magnitudeSquaredArray, candidate* globalCandidateArray, int numharm, long numFloats, int numCandidatesPerBlock){
-    __shared__ float lookupArray[512];
-    __shared__ float sumArray[256];
+    __shared__ __nv_bfloat16 lookupArray[512];
+    __shared__ __nv_bfloat16 sumArray[256];
     __shared__ power_index_struct searchArray[256];
     __shared__ candidate localCandidateArray[16]; //oversized, has to be greater than numCandidatesPerBlock
 
     int globalThreadIndex = blockDim.x*blockIdx.x + threadIdx.x;
     int localThreadIndex = threadIdx.x;
 
-    lookupArray[localThreadIndex] = __bfloat162float(magnitudeSquaredArray[globalThreadIndex]);
-    lookupArray[localThreadIndex + 256] = __bfloat162float(magnitudeSquaredArray[globalThreadIndex + 256]);
+    lookupArray[localThreadIndex] = magnitudeSquaredArray[globalThreadIndex];
+    lookupArray[localThreadIndex + 256] = magnitudeSquaredArray[globalThreadIndex + 256];
     //printf("lookupArray[%d] = %f\n", localThreadIndex, lookupArray[localThreadIndex]);
     __syncthreads();
 
@@ -406,6 +406,135 @@ __global__ void boxcarFilterArray(__nv_bfloat16* magnitudeSquaredArray, candidat
     }
     __syncthreads();
     searchAndUpdate(sumArray, searchArray, localCandidateArray, 256, 9, localThreadIndex, globalThreadIndex, numharm);
+
+    __syncthreads();
+
+    if (localThreadIndex < numCandidatesPerBlock){
+        globalCandidateArray[blockIdx.x*numCandidatesPerBlock+localThreadIndex] = localCandidateArray[localThreadIndex];
+    }
+}
+
+__device__ void vec2SearchAndUpdate(__nv_bfloat162* sumArray, power_index_struct* searchArray, candidate* localCandidateArray, int z, int outputCounter, int localThreadIndex, int globalThreadIndex, int numharm){
+    if (sumArray[localThreadIndex].x > sumArray[localThreadIndex].y){
+        searchArray[localThreadIndex].power = __bfloat162float(sumArray[localThreadIndex].x);
+        searchArray[localThreadIndex].index = localThreadIndex;
+    } else {
+        searchArray[localThreadIndex].power = __bfloat162float(sumArray[localThreadIndex].y);
+        searchArray[localThreadIndex].index = localThreadIndex + 256;
+    } 
+    
+    for (int stride = blockDim.x / 2; stride>0; stride /= 2){
+        if (localThreadIndex < stride){
+            if (searchArray[localThreadIndex].power < searchArray[localThreadIndex + stride].power){
+                searchArray[localThreadIndex] = searchArray[localThreadIndex + stride];
+            }
+        }
+        __syncthreads();
+    }
+    if (localThreadIndex == 0){
+        localCandidateArray[outputCounter].power = searchArray[0].power;
+        localCandidateArray[outputCounter].r = 2 * blockIdx.x * blockDim.x + (int) searchArray[0].index;
+        localCandidateArray[outputCounter].z = z;
+        localCandidateArray[outputCounter].logp = 0.0f;
+        localCandidateArray[outputCounter].numharm = numharm;
+    }
+}
+
+__global__ void vec2BoxcarFilterArray(__nv_bfloat16* magnitudeSquaredArray, candidate* globalCandidateArray, int numharm, long numFloats, int numCandidatesPerBlock){
+    __shared__ __nv_bfloat162 lookupArray[512];
+    __shared__ __nv_bfloat162 sumArray[256];
+    __shared__ power_index_struct searchArray[256];
+    __shared__ candidate localCandidateArray[16]; //oversized, has to be greater than numCandidatesPerBlock
+
+    int globalThreadIndex = 2*blockDim.x*blockIdx.x + threadIdx.x;
+    int localThreadIndex = threadIdx.x;
+
+    __syncthreads();
+
+    lookupArray[localThreadIndex].x = magnitudeSquaredArray[globalThreadIndex];;
+    lookupArray[localThreadIndex].y = magnitudeSquaredArray[globalThreadIndex + 256];
+
+    lookupArray[localThreadIndex + 256].x = magnitudeSquaredArray[globalThreadIndex + 256];
+    lookupArray[localThreadIndex + 256].y = magnitudeSquaredArray[globalThreadIndex + 512];
+
+
+    //printf("lookupArray[%d] = %f\n", localThreadIndex, lookupArray[localThreadIndex]);
+    __syncthreads();
+
+    // initialise the sum array
+    sumArray[localThreadIndex].x = 0.0f;
+    sumArray[localThreadIndex].y = 0.0f;
+    __syncthreads();
+
+    // begin boxcar filtering
+    // search at z = 0
+    sumArray[localThreadIndex] += lookupArray[localThreadIndex + 0];
+    __syncthreads();
+    vec2SearchAndUpdate(sumArray, searchArray, localCandidateArray, 0, 0, localThreadIndex, globalThreadIndex, numharm);
+
+    // search at z = 1
+    sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 1];
+    __syncthreads();
+    vec2SearchAndUpdate(sumArray, searchArray, localCandidateArray, 1, 1, localThreadIndex, globalThreadIndex, numharm);
+
+    // search at z = 2
+    sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 2];
+    __syncthreads();
+    vec2SearchAndUpdate(sumArray, searchArray, localCandidateArray, 2, 2, localThreadIndex, globalThreadIndex, numharm);
+
+    // search at z = 4
+    sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 3];
+    sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 4];
+    __syncthreads();
+    vec2SearchAndUpdate(sumArray, searchArray, localCandidateArray, 4, 3, localThreadIndex, globalThreadIndex, numharm);
+
+    // search at z = 8
+    sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 5];
+    sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 6];
+    sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 7];
+    sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + 8];
+    __syncthreads();
+    vec2SearchAndUpdate(sumArray, searchArray, localCandidateArray, 8, 4, localThreadIndex, globalThreadIndex, numharm);
+
+    // search at z = 16
+    #pragma unroll
+    for (int z = 9; z < 17; z++){
+        sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + z];
+    }
+    __syncthreads();
+    vec2SearchAndUpdate(sumArray, searchArray, localCandidateArray, 16, 5, localThreadIndex, globalThreadIndex, numharm);
+
+    // search at z = 32
+    #pragma unroll
+    for (int z = 17; z < 33; z++){
+        sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + z];
+    }
+    __syncthreads();
+    vec2SearchAndUpdate(sumArray, searchArray, localCandidateArray, 32, 6, localThreadIndex, globalThreadIndex, numharm);
+
+    // search at z = 64
+    #pragma unroll
+    for (int z = 33; z < 65; z++){
+        sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + z];
+    }
+    __syncthreads();
+    vec2SearchAndUpdate(sumArray, searchArray, localCandidateArray, 64, 7, localThreadIndex, globalThreadIndex, numharm);
+
+    // search at z = 128
+    #pragma unroll
+    for (int z = 65; z < 129; z++){
+        sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + z];
+    }
+    __syncthreads();
+    vec2SearchAndUpdate(sumArray, searchArray, localCandidateArray, 128, 8, localThreadIndex, globalThreadIndex, numharm);
+
+    // search at z = 256
+    #pragma unroll
+    for (int z = 129; z < 257; z++){
+        sumArray[localThreadIndex] +=  lookupArray[localThreadIndex + z];
+    }
+    __syncthreads();
+    vec2SearchAndUpdate(sumArray, searchArray, localCandidateArray, 256, 9, localThreadIndex, globalThreadIndex, numharm);
 
     __syncthreads();
 
@@ -913,6 +1042,12 @@ int main(int argc, char* argv[]){
     int numBlocksBoxcar3 = ((numFloats3) + numThreadsBoxcar - 1)/ numThreadsBoxcar;
     int numBlocksBoxcar4 = ((numFloats4) + numThreadsBoxcar - 1)/ numThreadsBoxcar;
 
+    int numThreadsBoxcarVec = 256;
+    int numBlocksBoxcarVec1 = (numMagnitudes + numThreadsBoxcar - 1) / numThreadsBoxcar / 2;
+    int numBlocksBoxcarVec2 = ((numFloats2) + numThreadsBoxcar - 1) / numThreadsBoxcar / 2;
+    int numBlocksBoxcarVec3 = ((numFloats3) + numThreadsBoxcar - 1) / numThreadsBoxcar / 2;
+    int numBlocksBoxcarVec4 = ((numFloats4) + numThreadsBoxcar - 1) / numThreadsBoxcar / 2;
+
     int numThreadsMagnitude = 1024;
     int numBlocksMagnitude = (numMagnitudes + numThreadsMagnitude - 1)/ numThreadsMagnitude;
     
@@ -1010,13 +1145,22 @@ int main(int argc, char* argv[]){
     cudaEventRecord(start);
 
     // Launch boxcar for each harmonic array
-    boxcarFilterArray<<<numBlocksBoxcar1, numThreadsBoxcar, 0>>>(
+    /*boxcarFilterArray<<<numBlocksBoxcar1, numThreadsBoxcar, 0>>>(
         magnitudeSquaredArray, globalCandidateArray1, 1, numMagnitudes, numCandidatesPerBlock);
     boxcarFilterArray<<<numBlocksBoxcar2, numThreadsBoxcar, 0>>>(
         decimatedArrayBy2, globalCandidateArray2, 2, numMagnitudes/2, numCandidatesPerBlock);
     boxcarFilterArray<<<numBlocksBoxcar3, numThreadsBoxcar, 0>>>(
         decimatedArrayBy3, globalCandidateArray3, 3, numMagnitudes/3, numCandidatesPerBlock);
     boxcarFilterArray<<<numBlocksBoxcar4, numThreadsBoxcar, 0>>>(
+        decimatedArrayBy4, globalCandidateArray4, 4, numMagnitudes/4, numCandidatesPerBlock);*/
+
+    vec2BoxcarFilterArray<<<numBlocksBoxcarVec1, numThreadsBoxcarVec, 0>>>(
+        magnitudeSquaredArray, globalCandidateArray1, 1, numMagnitudes, numCandidatesPerBlock);
+    vec2BoxcarFilterArray<<<numBlocksBoxcarVec2, numThreadsBoxcarVec, 0>>>(
+        decimatedArrayBy2, globalCandidateArray2, 2, numMagnitudes/2, numCandidatesPerBlock);
+    vec2BoxcarFilterArray<<<numBlocksBoxcarVec3, numThreadsBoxcarVec, 0>>>(
+        decimatedArrayBy3, globalCandidateArray3, 3, numMagnitudes/3, numCandidatesPerBlock);
+    vec2BoxcarFilterArray<<<numBlocksBoxcarVec4, numThreadsBoxcarVec, 0>>>(
         decimatedArrayBy4, globalCandidateArray4, 4, numMagnitudes/4, numCandidatesPerBlock);
     cudaDeviceSynchronize();
 
